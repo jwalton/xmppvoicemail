@@ -10,4 +10,15 @@ TWILIO_AUTH = "XXX"
 TWILIO_NUMBER = "555555555"
 
 # set the domain your using for xmpp..
-XMPP_DOMAIN = "<app_subdomain>@appspotchat.com"
+XMPP_DOMAIN = "<app_subdomain>.appspotchat.com"
+
+DEFAULT_SENDER = "xmppvoicemail"
+
+# Dictionary of phone numbers to nicknames.  Phone numbers should be of the
+# format "16135551234", with no extra -s or ()s or anything.
+NICKNAMES = {
+	"16135551234": "Mom",
+	"16135559239": "Dad"
+}
+
+SESSION_SECRET_KEY = "something-secret"
