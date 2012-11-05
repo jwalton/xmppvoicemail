@@ -8,6 +8,7 @@ from google.appengine.ext.webapp import template
 from google.appengine.api import xmpp
 from google.appengine.api import mail
 from google.appengine.api import urlfetch
+from google.appengine.api import app_identity
 from google.appengine.ext import db
 from google.appengine.ext.webapp.mail_handlers import InboundMailHandler
 
@@ -16,7 +17,7 @@ from phonenumberutils import stripNumber, toPrettyNumber
 import config
 
 DEV_ENVIRONMENT = os.environ['SERVER_SOFTWARE'].startswith('Development')
-
+APP_ID = app_identity.get_application_id()
 
 class XmppUser(db.Model):
     jid = db.StringProperty(required=True)
@@ -38,8 +39,6 @@ class XmppVoiceMail:
         """
         answer = False
 
-        fromUser = fromNickname + "@" + config.XMPP_DOMAIN
-
         user = XmppUser.getFromJid(config.USERJID)
         if user:
             logging.info("Found user")
@@ -47,27 +46,44 @@ class XmppVoiceMail:
             logging.info("No user: " + config.USERJID)
         if user and user.presence:
             # Send the message as XMPP
-            result = self.sendXMPPMessage(message, fromUser)
+            result = self.sendXMPPMessage(message, fromNickname)
             answer = result == xmpp.NO_ERROR
         else:
             # Send an email
-            mail.send_mail(
-                sender=fromUser,
-                to=config.USER_EMAIL,
+            xmppVoiceMail.sendEmailMessage(
                 subject=message,
-                body="EOM")
+                fromNickname=fromNickname)
             answer = True
 
         return answer
 
 
-    def sendXMPPMessage(self, message, fromJid=None):
-        if not fromJid:
-            fromJid = config.DEFAULT_SENDER + "@" + config.XMPP_DOMAIN
-        logging.debug("Sending XMPP message to " + config.USERJID)
+    def sendXMPPMessage(self, message, fromNickname=None):
+        if not fromNickname:
+            fromNickname = config.DEFAULT_SENDER
+
+        logging.debug("Sending XMPP message to " + config.USERJID + ": " + message)
+
+        fromJid = fromNickname + "@" + APP_ID + ".appspotchat.com"
         xmpp.send_invite(config.USERJID, fromJid)
         return xmpp.send_message(config.USERJID, message, from_jid=fromJid)
 
+
+    def sendEmailMessage(self, subject, body=None, fromNickname=None):
+        if not body:
+            body = ""
+
+        if not fromNickname:
+            fromNickname = config.DEFAULT_SENDER
+
+        logging.debug("Sending eMail message to " + config.USER_EMAIL + ": " + subject)
+
+        fromAddress = fromNickname + "@" + APP_ID + ".appspotmail.com"
+        mail.send_mail(
+            sender=fromAddress,
+            to=config.USER_EMAIL,
+            subject=subject,
+            body=body)
 
     def sendSMS(self, toNumber, body):
         logging.info("SMS to " + toNumber + ": " + body)
@@ -267,9 +283,7 @@ class XMPPHandler(webapp2.RequestHandler):
 
             if errorMessage or (not toNumber):
                 # Reply via XMPP to let the sender know we can't route this message
-                xmppVoiceMail.sendXMPPMessage(
-                    "ERROR: " + errorMessage,
-                    fromJid=(config.DEFAULT_SENDER) +  "@" + config.XMPP_DOMAIN)
+                xmppVoiceMail.sendXMPPMessage("ERROR: " + errorMessage)
 
             else:
                 # Send the message to the SMS number
@@ -329,10 +343,8 @@ class MailHandler(InboundMailHandler):
                 xmppVoiceMail.getNumberAndBodyFromEmail(mail_message, messageBody)
 
             if errorMessage or (not toNumber):
-                # Reply via XMPP to let the sender know we can't route this message
-                mail.send_mail(
-                    sender=config.DEFAULT_SENDER,
-                    to=config.USER_EMAIL,
+                # Reply via email to let the sender know we can't route this message
+                xmppVoiceMail.sendEmailMessage(
                     subject="ERROR: " + errorMessage,
                     body="Original message:\n" + messageBody)
             else:
