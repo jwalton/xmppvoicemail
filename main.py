@@ -6,117 +6,114 @@ import os, urllib, logging, base64, re
 import webapp2
 from google.appengine.ext.webapp import template
 from google.appengine.api import xmpp
+from google.appengine.api import mail
 from google.appengine.api import urlfetch
-import config
+from google.appengine.ext import db
+from google.appengine.ext.webapp.mail_handlers import InboundMailHandler
+
 from phonenumberutils import stripNumber, toPrettyNumber
 
-def sendXMPPMessage(message, fromJid=None):
-    if not fromJid:
-        fromJid = config.DEFAULT_SENDER + "@" + config.XMPP_DOMAIN
-    logging.debug("Sending XMPP message to " + config.USERJID)
-    xmpp.send_message(config.USERJID, message, from_jid=fromJid)
+import config
+
+DEV_ENVIRONMENT = os.environ['SERVER_SOFTWARE'].startswith('Development')
 
 
-class MainHandler(webapp2.RequestHandler):
-    def get(self):
-        path = os.path.join(os.path.dirname(__file__), 'index.html')
-        self.response.headers['Content-Type'] = 'text/plain'
-        self.response.write('Hello World!')
+class XmppUser(db.Model):
+    jid = db.StringProperty(required=True)
+    presence = db.BooleanProperty(required=True)
+
+    @staticmethod
+    def getFromJid(jid):
+        q = db.GqlQuery("SELECT * FROM XmppUser WHERE jid = :1", jid)
+        return q.get()
+
+class XmppVoiceMail:
+    def sendMessageToUser(self, message, fromNickname):
+        """
+        Send a message to the user who owns this XmppVoiceMail account.
+
+        fromNickname is the nickname to send the message from.
+
+        Returns True on success, False on failure.
+        """
+        answer = False
+
+        fromUser = fromNickname + "@" + config.XMPP_DOMAIN
+
+        user = XmppUser.getFromJid(config.USERJID)
+        if user:
+            logging.info("Found user")
+        else:
+            logging.info("No user: " + config.USERJID)
+        if user and user.presence:
+            # Send the message as XMPP
+            result = self.sendXMPPMessage(message, fromUser)
+            answer = result == xmpp.NO_ERROR
+        else:
+            # Send an email
+            mail.send_mail(
+                sender=fromUser,
+                to=config.USER_EMAIL,
+                subject=message,
+                body="EOM")
+            answer = True
+
+        return answer
 
 
-class CallHandler(webapp2.RequestHandler):
-    # Handles an incoming voice call from Twilio.
-    def post(self):
-        From = self.request.get("From")
-        CallStatus = self.request.get("CallStatus")
-
-        logging.info("Call from: "+From+" status:"+CallStatus)
-        sendXMPPMessage("Call from: "+From+" status:"+CallStatus)
-
-        path = os.path.join(os.path.dirname(__file__), 'receivecall.xml')
-        template_vars = {"callbackurl": "/recording"}
-        self.response.out.write(template.render(path, template_vars))
+    def sendXMPPMessage(self, message, fromJid=None):
+        if not fromJid:
+            fromJid = config.DEFAULT_SENDER + "@" + config.XMPP_DOMAIN
+        logging.debug("Sending XMPP message to " + config.USERJID)
+        xmpp.send_invite(config.USERJID, fromJid)
+        return xmpp.send_message(config.USERJID, message, from_jid=fromJid)
 
 
-class PostRecording(webapp2.RequestHandler):
-    def post(self):
-        RecordingUrl = self.request.get("RecordingUrl")
-        TranscriptionStatus = self.request.get("TranscriptionStatus")
-        Caller = self.request.get("Caller")
-        TranscriptionText = self.request.get("TranscriptionText")
+    def sendSMS(self, toNumber, body):
+        logging.info("SMS to " + toNumber + ": " + body)
 
-        ret = sendXMPPMessage("New message: ("+Caller+")"+
-            TranscriptionText+"Recording:"+RecordingUrl)
+        if not DEV_ENVIRONMENT:
+            form_fields = {
+                "From": config.TWILIO_NUMBER,
+                "To": toNumber,
+                "Body": body
+            }
+            form_data = urllib.urlencode(form_fields)
 
-        if(ret == xmpp.NO_ERROR):
-            self.response.out.write('')
+            twurl = "https://api.twilio.com/2010-04-01/Accounts/"+config.TWILIO_ACID+"/SMS/Messages"
+            logging.debug('The twilio url: ' + twurl)
 
+            result = urlfetch.fetch(url=twurl,
+                                    payload=form_data,
+                                    method=urlfetch.POST,
+                                    headers={'Content-Type': 'application/x-www-form-urlencoded',
+                                             "Authorization": "Basic %s" % (base64.encodestring(config.TWILIO_ACID + ":" + config.TWILIO_AUTH)[:-1]).replace('\n', '') })
+            logging.debug('reply content: ' + result.content)
 
-class SMSHandler(webapp2.RequestHandler):
-    # Handles an incoming SMS message from Twilio.
-    def get(self):
-        self.post()
-
-    def post(self):
-        fromNumber = self.request.get("From")
-        toNumber = self.request.get("To")
-        body = self.request.get("Body")
-
+    def getNicknameForNumber(self, number):
         nickname = None
 
         # Find the nickname
-        strippedFrom = stripNumber(fromNumber)
+        strippedNumber = stripNumber(number)
 
-        if strippedFrom in config.NICKNAMES:
-            nickname = config.NICKNAMES[strippedFrom]
-        elif len(strippedFrom) > 0 and \
-             strippedFrom[0] == "1" and \
-             strippedFrom[1:] in config.NICKNAMES:
-            nickname = config.NICKNAMES[strippedFrom[1:]]
+        if strippedNumber in config.NICKNAMES:
+            nickname = config.NICKNAMES[strippedNumber]
+        elif len(strippedNumber) > 0 and \
+             strippedNumber[0] == "1" and \
+             strippedNumber[1:] in config.NICKNAMES:
+            nickname = config.NICKNAMES[strippedNumber[1:]]
 
         # If we couldn't find a nickname, then send as the default nick, and
         # add the number to the message.
         if nickname is None:
             nickname = config.DEFAULT_SENDER
-            body = "" + toPrettyNumber(fromNumber) + ": " + body
 
-        fromJid = nickname + "@" + config.XMPP_DOMAIN
+        return nickname
 
-        xmpp.send_invite(config.USERJID, fromJid)
-        sendXMPPMessage(body, fromJid)
-        self.response.out.write("")
-
-
-class InviteHandler(webapp2.RequestHandler):
-    def get(self):
-        self.post()
-
-    def post(self):
-        self.response.out.write('<html><body>')
-
-        for nickname in config.NICKNAMES.values():
-            fromJid = nickname + "@" + config.XMPP_DOMAIN
-            xmpp.send_invite(config.USERJID, fromJid)
-            self.response.out.write('Sent invitation for ' + fromJid + "<br/>")
-
-        fromJid = config.DEFAULT_SENDER + "@" + config.XMPP_DOMAIN
-        xmpp.send_invite(config.USERJID, fromJid)
-        self.response.out.write('Sent invitation for ' + fromJid + "<br/>")
-
-        self.response.out.write('</body></html>')
-
-
-class FakeXMPPMessage:
-    def __init__(self, sender, to, body):
-        self.sender = sender
-        self.to = to
-        self.body = body
-
-class XMPPHandler(webapp2.RequestHandler):
     _messageRegex = re.compile(r"^([^:]*):(.*)$")
 
-    def _getNumberAndBodyFromMessage(self, xmppMessage):
-        """ Get the to phone number and the message body from the message.
+    def _getNumberAndBody(self, toAddress, body):
+        """ Get the to phone number and the message body from a message.
         
         The message will be either to the DEFAULT_SENDER, in which case
         the body will be of the format "number:message", or else the message
@@ -127,8 +124,7 @@ class XMPPHandler(webapp2.RequestHandler):
         content.  If errorMessage is not None, then the other two fields are
         undefined.
         """
-        toNickname = xmppMessage.to.split("@")[0]
-        body = xmppMessage.body
+        toNickname = toAddress.split("@")[0]
         toNumber = None
         errorMessage = None
 
@@ -163,6 +159,99 @@ class XMPPHandler(webapp2.RequestHandler):
 
         return (toNumber, body, errorMessage)
 
+
+    def getNumberAndBodyFromEmail(self, emailMessage, messageBody):
+        return self._getNumberAndBody(emailMessage.to, messageBody)
+
+
+    def getNumberAndBodyFromMessage(self, xmppMessage):
+        return self._getNumberAndBody(xmppMessage.to.split("/")[0], xmppMessage.body)
+
+
+xmppVoiceMail = XmppVoiceMail()
+
+class MainHandler(webapp2.RequestHandler):
+    def get(self):
+        path = os.path.join(os.path.dirname(__file__), 'index.html')
+        self.response.headers['Content-Type'] = 'text/plain'
+        self.response.write('Hello World!')
+
+
+class CallHandler(webapp2.RequestHandler):
+    # Handles an incoming voice call from Twilio.
+    def post(self):
+        From = self.request.get("From")
+        CallStatus = self.request.get("CallStatus")
+
+        logging.info("Call from: "+From+" status:"+CallStatus)
+        xmppVoiceMail.sendXMPPMessage("Call from: "+From+" status:"+CallStatus)
+
+        path = os.path.join(os.path.dirname(__file__), 'receivecall.xml')
+        template_vars = {"callbackurl": "/recording"}
+        self.response.out.write(template.render(path, template_vars))
+
+
+class PostRecording(webapp2.RequestHandler):
+    def post(self):
+        recordingUrl = self.request.get("RecordingUrl")
+        transcriptionStatus = self.request.get("TranscriptionStatus")
+        caller = self.request.get("Caller")
+        transcriptionText = self.request.get("TranscriptionText")
+
+        body = "New message: (" + caller + "): " + transcriptionText + "Recording:" + recordingUrl
+
+        result = xmppVoiceMail.sendMessageToUser(body, config.DEFAULT_SENDER)
+
+        if(result):
+            self.response.out.write('')
+
+
+class SMSHandler(webapp2.RequestHandler):
+    # Handles an incoming SMS message from Twilio.
+    def get(self):
+        self.post()
+
+    def post(self):
+        fromNumber = self.request.get("From")
+        toNumber = self.request.get("To")
+        body = self.request.get("Body")
+
+        # Find the XMPP user to send this from
+        nickname = xmppVoiceMail.getNicknameForNumber(fromNumber)
+        if nickname == config.DEFAULT_SENDER:
+            body = "" + toPrettyNumber(fromNumber) + ": " + body
+
+        xmppVoiceMail.sendMessageToUser(body, nickname)
+
+        self.response.out.write("")
+
+
+class InviteHandler(webapp2.RequestHandler):
+    def get(self):
+        self.post()
+
+    def post(self):
+        self.response.out.write('<html><body>')
+
+        for nickname in config.NICKNAMES.values():
+            fromJid = nickname + "@" + config.XMPP_DOMAIN
+            xmpp.send_invite(config.USERJID, fromJid)
+            self.response.out.write('Sent invitation for ' + fromJid + "<br/>")
+
+        fromJid = config.DEFAULT_SENDER + "@" + config.XMPP_DOMAIN
+        xmpp.send_invite(config.USERJID, fromJid)
+        self.response.out.write('Sent invitation for ' + fromJid + "<br/>")
+
+        self.response.out.write('</body></html>')
+
+
+class FakeXMPPMessage:
+    def __init__(self, sender, to, body):
+        self.sender = sender
+        self.to = to
+        self.body = body
+
+class XMPPHandler(webapp2.RequestHandler):
     def _handleXmppMessage(self, message):
         # Handle an XMPP message.
         
@@ -174,34 +263,17 @@ class XMPPHandler(webapp2.RequestHandler):
             logging.error("Received XMPP message from " + user)
 
         else:
-            toNumber, body, errorMessage = self._getNumberAndBodyFromMessage(message)
+            toNumber, body, errorMessage = xmppVoiceMail.getNumberAndBodyFromMessage(message)
 
             if errorMessage or (not toNumber):
                 # Reply via XMPP to let the sender know we can't route this message
-                sendXMPPMessage(
+                xmppVoiceMail.sendXMPPMessage(
                     "ERROR: " + errorMessage,
                     fromJid=(config.DEFAULT_SENDER) +  "@" + config.XMPP_DOMAIN)
 
             else:
-                logging.warn("Message to " + toNumber + ": " + body)
-                
                 # Send the message to the SMS number
-                form_fields = {
-                    "From": config.TWILIO_NUMBER,
-                    "To": toNumber,
-                    "Body": body
-                }
-                form_data = urllib.urlencode(form_fields)
-
-                twurl = "https://api.twilio.com/2010-04-01/Accounts/"+config.TWILIO_ACID+"/SMS/Messages"
-                logging.debug('The twilio url: ' + twurl)
-
-                result = urlfetch.fetch(url=twurl,
-                                        payload=form_data,
-                                        method=urlfetch.POST,
-                                        headers={'Content-Type': 'application/x-www-form-urlencoded',
-                                                 "Authorization": "Basic %s" % (base64.encodestring(config.TWILIO_ACID + ":" + config.TWILIO_AUTH)[:-1]).replace('\n', '') })
-                logging.debug('reply content: ' + result.content)
+                xmppVoiceMail.sendSMS(toNumber, body)
 
     def get(self):
         to = self.request.get("To")
@@ -214,12 +286,57 @@ class XMPPHandler(webapp2.RequestHandler):
         message = xmpp.Message(self.request.POST)
         self._handleXmppMessage(message)
 
-
 class XmppPresenceHandler(webapp2.RequestHandler):
     def post(self, available):
-        user = self.request.get('from').split('/')[0]
-        suspend = available == 'unavailable'
-        # TODO: Do something useful here.
+        userJid = self.request.get('from').split('/')[0]
+        userAvailable = (available == 'available')
+
+        if userJid != config.USERJID:
+            logging.warn("Got XMPP presence for unknown user " + userJid)
+        else:
+            if userAvailable:
+                logging.info("User " + userJid + " became available.")
+            else:
+                logging.info("User " + userJid + " went away.")
+
+            # Update the user in the DB.
+            user = XmppUser.getFromJid(userJid)
+            if not user:
+                logging.info("Creating DB entry for " + userJid)
+                user = XmppUser(jid=userJid, presence=userAvailable)
+            else:
+                user.presence = userAvailable
+
+            user.put()
+
+
+class MailHandler(InboundMailHandler):
+    def receive(self, mail_message):
+        if not config.USER_EMAIL in mail_message.sender:
+            logging.warn("Got email from unknown user " + mail_message.sender)
+        else:
+            logging.info("Received an email from: " + mail_message.sender)
+
+            messageBody = ""
+            for content_type, body in mail_message.bodies():
+                messageBody += body.decode()
+                if messageBody:
+                    break
+
+            logging.info("Message body: " + messageBody)
+
+            toNumber, body, errorMessage = \
+                xmppVoiceMail.getNumberAndBodyFromEmail(mail_message, messageBody)
+
+            if errorMessage or (not toNumber):
+                # Reply via XMPP to let the sender know we can't route this message
+                mail.send_mail(
+                    sender=config.DEFAULT_SENDER,
+                    to=config.USER_EMAIL,
+                    subject="ERROR: " + errorMessage,
+                    body="Original message:\n" + messageBody)
+            else:
+                xmppVoiceMail.sendSMS(toNumber, body)
 
 
 def handle_404(request, response, exception):
@@ -240,6 +357,8 @@ def main():
         (r'/sms', SMSHandler),
         (r'/invite', InviteHandler),
         (r'/_ah/xmpp/message/chat/', XMPPHandler),
+        (r'/_ah/xmpp/presence/(available|unavailable)/', XmppPresenceHandler),
+        MailHandler.mapping(),
     ]
 
     webapp2Config = {}

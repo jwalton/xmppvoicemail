@@ -1,6 +1,9 @@
-# change this to the JID of your Xmpp account (example: dthompson@gmail.com)
+# The XMPP account to send notifications to.
+# Change this to the JID of your Xmpp account (example: dthompson@gmail.com).
 USERJID = "you@domain.com"
 
+# The email address to send notifications to if you are offline.
+USER_EMAIL = "you@domain.com"
 
 #Twilio Account ID
 TWILIO_ACID = "XXX"
