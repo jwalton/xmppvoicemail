@@ -1,0 +1,4 @@
+# Ignore pyc files
+*.pyc
+# Ignore config.py
+config.py
