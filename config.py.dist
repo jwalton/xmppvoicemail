@@ -5,7 +5,7 @@ USERJID = "you@domain.com"
 # The email address to send notifications to if you are offline.
 USER_EMAIL = "you@domain.com"
 
-#Twilio Account ID
+#Twilio Account SID
 TWILIO_ACID = "XXX"
 #Twilio Auth Token
 TWILIO_AUTH = "XXX"
