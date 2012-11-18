@@ -1,12 +1,26 @@
 application: xmppvoicemail
-version: 1
+version: 2
 runtime: python27
 api_version: 1
 threadsafe: true
 
 handlers:
 - url: /css
-  static_dir: css
+  static_dir: assets/css
+
+- url: /js
+  static_dir: assets/js
+
+- url: /images
+  static_dir: assets/images
+
+- url: /
+  static_files: assets/index.html
+  upload: assets/index.html
+
+- url: /index.html
+  static_files: assets/index.html
+  upload: assets/index.html
 
 - url: .*
   script: main.app

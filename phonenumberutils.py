@@ -1,6 +1,6 @@
 import re
 
-_phoneNumberRegex = re.compile(r"^\+?(?:1)[- ]?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$")
+_phoneNumberRegex = re.compile(r"^\+?1?[ -]?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$")
 
 def stripNumber(number):
     return re.sub(r'[^0-9]', "", number)
