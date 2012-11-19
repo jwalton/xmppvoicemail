@@ -17,6 +17,43 @@
         model: Contact,
         url: '/api/admin/contacts'
 
+    window.LoginView = Backbone.View.extend
+        events:
+            'click .loginButton'    : 'login'
+
+        initialize: () ->
+            _.bindAll this, "render"
+            @template = _.template($('#login-template').html())
+
+        render: () ->
+            renderedContent = @template
+            $(@el).html(renderedContent)
+            return this
+
+        login: () ->
+            # TODO: We should probably escape the password here or encode it or something?
+            self = this
+            $.ajax
+                type: 'POST'
+                url: '/api/login'
+                data: 'password=' + @$('.password').val
+                success: () ->
+                    window.app.navigate 'contacts', trigger: true
+
+                error: (xhr, textStatus, errorThrown) ->
+                    errorMessage = ""
+                    try
+                        errorResult = $.parseJSON xhr.responseText
+                        errorMessage = errorResult.error
+                    catch e
+                        errorMessage = xhr.responseText
+                        if !errorMessage
+                            errorMessage = "Error: " + xhr.status
+
+                    self.$('.errorText').html errorMessage
+
+
+
     window.ContactView = Backbone.View.extend
         tagName: 'li'
         className: 'listItem'
@@ -134,16 +171,24 @@
     #### Router
     window.XmppVoiceMail = Backbone.Router.extend
         routes:
-            '': 'contactEditor'
+            '': 'login'
+            'contacts': 'contactEditor'
 
         initialize: () ->
+            @loginView = new LoginView()
+            @$main = $('#main')
+
             @contactEditorView = new ContactEditorView
                 collection: window.contacts
             contacts.fetch()
 
+        login: () ->
+            @$main.empty()
+            @$main.append @loginView.render().el
+
+
         contactEditor: () ->
-            $main = $('#main')
-            $main.empty()
-            $main.append @contactEditorView.render().el
+            @$main.empty()
+            @$main.append @contactEditorView.render().el
 
 )(jQuery)

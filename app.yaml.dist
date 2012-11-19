@@ -1,4 +1,5 @@
-application: xmppvoicemail
+# Edit the "applicaiton" name below
+application: CHANGEME
 version: 1
 runtime: python27
 api_version: 1

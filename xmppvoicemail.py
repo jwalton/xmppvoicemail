@@ -11,7 +11,7 @@ from google.appengine.api import xmpp
 
 import config
 
-from phonenumberutils import stripNumber, toPrettyNumber, toNormalizedNumber, validateNumber
+from phonenumberutils import  toPrettyNumber, toNormalizedNumber, validateNumber
 from models import XmppUser, Contact
 
 class Owner:

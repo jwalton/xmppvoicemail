@@ -91,7 +91,7 @@ class XmppPresenceHandler(webapp2.RequestHandler):
             # Update the user in the DB.
             user = XmppUser.getByJid(userJid)
             if not user:
-                logging.info("Creating DB entry for " + userJid)
+                logging.info("Creating DB entry for user " + userJid)
                 user = XmppUser(jid=userJid, presence=userAvailable)
             else:
                 user.presence = userAvailable
@@ -103,14 +103,13 @@ class XmppSubscribeHandler(webapp2.RequestHandler):
         sender = self.request.get('from').split('/')[0]
         to = self.request.get('to').split('/')[0]
 
-        logging.info("Got subscription type " + subscriptionType + " from " + sender + " to " + to)
-        
         contactName = to.split('@')[0]
         
         contact = Contact.getByName(contactName)
         if not contact:
-            logging.error("Got subscription for unknown contact " + to)
+            logging.error("Got subscription type " + subscriptionType + " for unknown contact " + to)
         else:
+            logging.info("Got subscription type " + subscriptionType + " from " + sender + " to " + to)        
             if subscriptionType.startswith("un"):
                 contact.subscribed = False
             else:
@@ -119,7 +118,7 @@ class XmppSubscribeHandler(webapp2.RequestHandler):
 
 class BaseApiHandler(webapp2.RequestHandler):
     def handle_exception(self, exception, debug):
-        if isinstance(exception, errors.ValidationError):
+        if isinstance(exception, errors.ValidationError) or isinstance(exception, errors.BadPasswordError):
             self.response.out.write(json.dumps({"errorType": exception.__class__.__name__, "error": exception.value}));
             self.response.set_status(400)
         
@@ -132,6 +131,11 @@ class BaseApiHandler(webapp2.RequestHandler):
             self.response.out.write(json.dumps({"errorType": exception.__class__.__name__, "error": "derp"}));
             self.response.set_status(500)
 
+    @webapp2.cached_property
+    def session(self):
+        # Returns a session using the default cookie key.
+        return self.session_store.get_session()
+
 class LoginHandler(BaseApiHandler):
     def dispatch(self):
         self.session_store = sessions.get_store(request=self.request)
@@ -140,13 +144,21 @@ class LoginHandler(BaseApiHandler):
             super(BaseApiHandler, self).dispatch()
         finally:
             self.session_store.save_sessions(self.response)
-
+            
+    def post(self):
+        password = self.request.get("password")
+        if password == config.ADMIN_PASSWORD:
+            self.session['user'] = True
+        else:
+            raise errors.BadPasswordError("Incorrect password.")
 
 class AuthenticatedApiHandler(BaseApiHandler):
     def dispatch(self):
         self.session_store = sessions.get_store(request=self.request)
 
         # TODO: Verify the user is validated        
+        if not "user" in self.session:
+            raise HTTPUnauthorized()
 
         try:        
             super(BaseApiHandler, self).dispatch()
@@ -174,8 +186,6 @@ class AdminContactsHandler(AuthenticatedApiHandler):
     def post(self):
         user = json.loads(self.request.body)
 
-        logging.info("Got POST for user " + user["name"])
-
         if not phonenumberutils.validateNumber(user['phoneNumber']):
             raise errors.ValidationError("Invalid phone number.")
             #return validationError(self.response, 'Invalid number ' + user['phoneNumber'])
@@ -193,6 +203,8 @@ class AdminContactsHandler(AuthenticatedApiHandler):
             raise errors.ValidationError('User ' + existingContact.name +
               ' already exists with number ' + existingContact.phoneNumber)
 
+
+        logging.info("Creating contact " + user["name"])
         contact = Contact(
             name = user['name'].lower(),
             phoneNumber = phonenumberutils.toPrettyNumber(user['phoneNumber']),
@@ -207,15 +219,13 @@ class AdminContactsHandler(AuthenticatedApiHandler):
 
     def delete(self, contactIdStr):
         contact = Contact.getByIdString(contactIdStr)
-        if not contact:
-            logging.info("Got DELETE for unknown user " + contactIdStr)
-        else:
+        if contact:
             if contact.isDefaultSender():
                 raise errors.ValidationError("Cannot delete default sender.")
-            logging.info("Got DELETE for user " + contact.name)
+            logging.info("Deleting contact " + contact.name)
             contact.delete()
         
-    # TODO: put for edits.
+    # TODO: Add put support for edits.
         
 
 class InviteHandler(webapp2.RequestHandler):
@@ -257,8 +267,10 @@ def main():
         (r'/call', CallHandler),
         (r'/sms', SMSHandler),
         (r'/invite', InviteHandler),
+        
         (r'/api/admin/contacts', AdminContactsHandler),
         (r'/api/admin/contacts/(.*)', AdminContactsHandler),
+        (r'/api/login', LoginHandler),
         
         (r'/_ah/xmpp/message/chat/', XMPPHandler),
         (r'/_ah/xmpp/presence/(available|unavailable)/', XmppPresenceHandler),

@@ -128,6 +128,15 @@
         <title></title>
         <!-- Place favicon.ico and apple-touch-icon.png in the root directory -->
 
+        <script type="text/template" id="login-template">
+            <h1>Login</h1>
+            <form class="login">
+                <input class="password" type="password" placeholder="Password"></input>
+                <input class="loginButton" type="button" value="Login"></input>
+            </form>
+            <div class="errorText"></div>
+        </script>
+
         <script type="text/template" id="contact-template">
             <!-- <div class="listItemControls"><img src="images/editicon.png"></div> -->
             <% if(subscribed) { %>

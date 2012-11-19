@@ -13,6 +13,49 @@
     model: Contact,
     url: '/api/admin/contacts'
   });
+  window.LoginView = Backbone.View.extend({
+    events: {
+      'click .loginButton': 'login'
+    },
+    initialize: function() {
+      _.bindAll(this, "render");
+      return this.template = _.template($('#login-template').html());
+    },
+    render: function() {
+      var renderedContent;
+      renderedContent = this.template;
+      $(this.el).html(renderedContent);
+      return this;
+    },
+    login: function() {
+      var self;
+      self = this;
+      return $.ajax({
+        type: 'POST',
+        url: '/api/login',
+        data: 'password=' + this.$('.password').val(),
+        success: function() {
+          return window.app.navigate('contacts', {
+            trigger: true
+          });
+        },
+        error: function(xhr, textStatus, errorThrown) {
+          var errorMessage, errorResult;
+          errorMessage = "";
+          try {
+            errorResult = $.parseJSON(xhr.responseText);
+            errorMessage = errorResult.error;
+          } catch (e) {
+            errorMessage = xhr.responseText;
+            if (!errorMessage) {
+              errorMessage = "Error: " + xhr.status;
+            }
+          }
+          return self.$('.errorText').html(errorMessage);
+        }
+      });
+    }
+  });
   window.ContactView = Backbone.View.extend({
     tagName: 'li',
     className: 'listItem',
@@ -138,19 +181,24 @@
   window.contacts = new window.Contacts();
   return window.XmppVoiceMail = Backbone.Router.extend({
     routes: {
-      '': 'contactEditor'
+      '': 'login',
+      'contacts': 'contactEditor'
     },
     initialize: function() {
+      this.loginView = new LoginView();
+      this.$main = $('#main');
       this.contactEditorView = new ContactEditorView({
         collection: window.contacts
       });
       return contacts.fetch();
     },
+    login: function() {
+      this.$main.empty();
+      return this.$main.append(this.loginView.render().el);
+    },
     contactEditor: function() {
-      var $main;
-      $main = $('#main');
-      $main.empty();
-      return $main.append(this.contactEditorView.render().el);
+      this.$main.empty();
+      return this.$main.append(this.contactEditorView.render().el);
     }
   });
 })(jQuery);
