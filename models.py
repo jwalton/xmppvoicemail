@@ -72,6 +72,6 @@ class Contact(db.Model):
         # TODO: Think about using some caching here, since we get this guy
         # all the time.
         return Contact.get_or_insert("DEFAULT_SENDER",
-            name="xmppVoiceMail",
+            name="xmppVoiceMail".lower(),
             phoneNumber="*",
             normalizedPhoneNumber="*")

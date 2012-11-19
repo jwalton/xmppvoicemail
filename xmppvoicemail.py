@@ -11,8 +11,30 @@ from google.appengine.api import xmpp
 
 import config
 
-from phonenumberutils import  toPrettyNumber, toNormalizedNumber, validateNumber
+from phonenumberutils import  toPrettyNumber, stripNumber, toNormalizedNumber, validateNumber
 from models import XmppUser, Contact
+
+class XmppVoiceMailException(Exception):
+    """ Abstract base class for all XmppVoiceMail errors.
+    """
+    def __init__(self, value):
+        self.value = value
+        
+    def __str__(self):
+        return repr(self.value)
+
+class PermissionException(Exception):
+    """ Thrown when an attempt is made to access a service by a user with insufficient permissions.
+    """
+    def __init__(self, value):
+        super(PermissionException, self).__init__(value)
+    
+
+class InvalidParametersException(Exception):
+    """ Thrown when parameters passed to a method are invalid.
+    """
+    def __init__(self, value):
+        super(InvalidParametersException, self).__init__(value)
 
 class Owner:
     """ Represents the owner of an XmppVoiceMail
@@ -24,6 +46,9 @@ class Owner:
         self.emailAddress = emailAddress
 
 class Communications:
+    def __init__(self):
+        self._DEV_ENVIRONMENT = os.environ['SERVER_SOFTWARE'].startswith('Development')
+    
     def sendMail(self, sender, to, subject, body):
         mail.send_mail(
             sender=sender,
@@ -67,7 +92,6 @@ class XmppVoiceMail:
     """
     def __init__(self, owner):
         self._APP_ID = app_identity.get_application_id()
-        self._DEV_ENVIRONMENT = os.environ['SERVER_SOFTWARE'].startswith('Development')
         self._owner = owner
         self._communications = Communications()
 
@@ -83,7 +107,7 @@ class XmppVoiceMail:
         else:
             contact = Contact.getDefaultSender()
             
-        self._sendMessageToOwner("Call from: " + displayFrom + " status:" + callStatus, contact, fromNumber)
+        self.sendMessageToOwner("Call from: " + displayFrom + " status:" + callStatus, contact, fromNumber)
 
     def handleVoiceMail(self, fromNumber, transcriptionText=None, recordingUrl=None):
         """Handle an incoming voice mail.
@@ -104,7 +128,7 @@ class XmppVoiceMail:
         if recordingUrl:
             body += " - Recording: " + recordingUrl
             
-        return self._sendMessageToOwner(body, contact, fromNumber)
+        return self.sendMessageToOwner(body, contact, fromNumber)
 
     def handleIncomingSms(self, fromNumber, toNumber, body):
         """Handle an incoming SMS message from the network.
@@ -115,62 +139,42 @@ class XmppVoiceMail:
             contact = Contact.getDefaultSender()
             
         # Forward the message to the owner
-        self._sendMessageToOwner(body, contact, fromNumber)
+        self.sendMessageToOwner(body, contact, fromNumber)
 
-    def handleIncomingXmpp(self, message):
+    def handleIncomingXmpp(self, sender, to, messageBody):
         """Handle an incoming XMPP message from the owner.
+        
+        Raises InvalidParametersException if there are problems with the incoming XMPP message.
+        Raises PermissionException if the sender is not authorized to use this service.
         """
-
         # Make sure the message is from the owner, to stop third parties from
         # using this to spam.
-        sender = message.sender.split('/')[0]
         if not sender == self._owner.jid:
-            logging.error("Received XMPP message from " + sender)
+            raise PermissionException("Incorrect XMPP user")
 
-        else:
-            toNumber, body, errorMessage = self._getNumberAndBodyFromXmppMessage(message)
+        self._forwardToSms(to, messageBody)
 
-            if errorMessage or (not toNumber):
-                # Reply via XMPP to let the sender know we can't route this message
-                message.reply("ERROR: " + errorMessage)
+    def handleIncomingEmail(self, sender, to, subject, messageBody):
+        """Handle an incoming Email message from the owner.
+        
+        Raises InvalidParametersException if there are any problems with the format of the email.
+        Raises PermissionException if the sender is not authorized to use this service.
+        """
+        if not self._owner.emailAddress in sender:
+            raise PermissionException("Incorrect XMPP user")
 
-            else:
-                # Send the message to the SMS number
-                self._communications.sendSMS(toNumber, body)
+        self._forwardToSms(to, messageBody)
 
+    def _forwardToSms(self, to, messageBody):
+        toNumber, body = self._getNumberAndBody(to, messageBody)
+        self._communications.sendSMS(toNumber, body)
 
-    def handleIncomingEmail(self, mail_message):
-        if not self._owner.emailAddress in mail_message.sender:
-            logging.warn("Got email from unknown user " + mail_message.sender)
-        else:
-            logging.debug("Received an email from: " + mail_message.sender)
-
-            # Extract the first message body we can find.
-            messageBody = ""
-            for content_type, body in mail_message.bodies():
-                messageBody += body.decode()
-                if messageBody:
-                    break
-
-            toNumber, body, errorMessage = \
-                self._getNumberAndBodyFromEmailMessage(mail_message, messageBody)
-
-            if errorMessage or (not toNumber):
-                # Reply via email to let the sender know we can't route this message
-                self._sendEmailMessage(
-                    subject = "ERROR: " + errorMessage,
-                    body = "Original message:\n" + messageBody)
-            else:
-                self._communications.sendSMS(toNumber, body)
 
     def sendXmppInvite(self, nickname):
         """Send an XMPP invite to the owner of this phone for the given nickname.
         """
         fromJid = nickname + "@" + self._APP_ID + ".appspotchat.com"
         self._communications.sendXmppInvite(fromJid, self._owner.jid)
-
-    def getDefaultSenderName(self):
-        return Contact.getDefaultSender().name
 
     _messageRegex = re.compile(r"^([^:]*):(.*)$")
 
@@ -181,50 +185,38 @@ class XmppVoiceMail:
         the body will be of the format "number:message", or else the message
         will be to a nickname, and the body will just be the message.
 
-        This returns the tuple (toNumber, body, errorMessage), where toNumber
+        This returns the tuple (toNumber, body), where toNumber
         is the SMS number to send this message to, and body is the message
-        content.  If errorMessage is not None, then the other two fields are
-        undefined.
+        content.
+        
+        Raises InvalidParametersException if there are any errors in the input.
         """
         
-        # TODO: Errors should be exceptions.
         toName = toAddress.split("@")[0]
         toNumber = None
-        errorMessage = None
 
-        if toName == self.getDefaultSenderName():
-            if not ":" in body:
-                errorMessage = "Use 'number:message' to send an SMS."
-            else:
-                # Parse the phone number and body out of the message
-                match = self._messageRegex.match(body)
-                if not match:
-                    errorMessage = "Use 'number:message' to send an SMS."
-                else:
-                    normalizedNumber = toNormalizedNumber(match.group(1))
-                    if not validateNumber(normalizedNumber):
-                        errorMessage = "Invalid number."
-                    else:
-                        body = match.group(2).strip()
-                        toNumber = "+" + normalizedNumber
-                    
-        else:
-            contact = Contact.getByName(toName)
+        contact = Contact.getByName(toName)
+        if not contact:
+            raise InvalidParametersException("Unknown contact " + toName)
+    
+        if not contact.isDefaultSender():
+            toNumber = contact.normalizedPhoneNumber
             
-            if not contact:
-                errorMessage = "Unknown nickname: " + toName
-            else:
-                toNumber = "+" + contact.normalizedPhoneNumber
+        else:
+            # Parse the phone number and body out of the message
+            match = self._messageRegex.match(body)
+            if not match:
+                raise InvalidParametersException("Use 'number:message' to send an SMS.")
 
-        return (toNumber, body, errorMessage)
+            toNumber = match.group(1)
+            if not validateNumber(toNumber):
+                raise InvalidParametersException("Invalid number: " + match.group(1))
 
+            toNumber = toNormalizedNumber(toNumber)
+            body = match.group(2).strip()
+                    
+        return (toNumber, body)
 
-    def _getNumberAndBodyFromEmailMessage(self, emailMessage, messageBody):
-        return self._getNumberAndBody(emailMessage.to, messageBody)
-
-
-    def _getNumberAndBodyFromXmppMessage(self, xmppMessage):
-        return self._getNumberAndBody(xmppMessage.to.split("/")[0], xmppMessage.body)
 
     def _ownerXmppPresent(self):
         xmppOnline = False
@@ -238,11 +230,14 @@ class XmppVoiceMail:
                 
         return xmppOnline
     
-    def _sendMessageToOwner(self, message, contact=None, fromNumber=None):
+    def sendMessageToOwner(self, message, contact=None, fromNumber=None):
         """
         Send a message to the user who owns this XmppVoiceMail account.
 
-        fromNickname is the nickname to send the message from.
+        contact is the contact to send the message from.
+        
+        fromNumber is the phone number to send the message from if contact is
+        the default sender.
 
         Returns True on success, False on failure.
         """
@@ -301,7 +296,7 @@ class XmppVoiceMail:
 
         fromName = fromContact.name
         if fromNumber:
-            fromAddress = toNormalizedNumber(fromNumber)
+            fromAddress = stripNumber(toNormalizedNumber(fromNumber))
         elif not fromContact.isDefaultSender():
             fromContact.normalizedPhoneNumber
         else:

@@ -5,6 +5,7 @@
 import logging
 import os
 import json
+import sys
 
 import webapp2
 from webapp2_extras import sessions
@@ -13,10 +14,9 @@ from webob.exc import HTTPUnauthorized, HTTPForbidden, HTTPException
 from google.appengine.ext.webapp import template
 from google.appengine.ext.webapp.mail_handlers import InboundMailHandler
 from google.appengine.api import xmpp, app_identity
-from google.appengine.ext import db
 
 import phonenumberutils
-from xmppvoicemail import XmppVoiceMail, Owner
+from xmppvoicemail import XmppVoiceMail, Owner, XmppVoiceMailException, PermissionException, InvalidParametersException
 from models import XmppUser, Contact
 import errors
 
@@ -67,11 +67,45 @@ class SMSHandler(webapp2.RequestHandler):
         self.response.out.write("")
 
 
+class MailHandler(InboundMailHandler):
+    def receive(self, mail_message):
+        try:
+            sender = mail_message.sender
+            to = mail_message.to
+            subject = mail_message.subject
+    
+            # Extract the first message body we can find.
+            messageBody = ""
+            for content_type, body in mail_message.bodies():
+                messageBody += body.decode()
+                if messageBody:
+                    break
+
+            xmppVoiceMail.handleIncomingEmail(sender, to, subject, messageBody)
+            
+        except InvalidParametersException as e:
+            xmppVoiceMail.sendMessageToOwner(e.value)
+            
+        except PermissionException as e:
+            logging.error(str(e))
+            
 class XMPPHandler(webapp2.RequestHandler):
     # Handle an incoming XMPP message
     def post(self):
         message = xmpp.Message(self.request.POST)
-        xmppVoiceMail.handleIncomingXmpp(message)
+
+        try:
+            sender = message.sender.split('/')[0]
+            to = message.to.split("/")[0]
+            messageBody = message.body
+            xmppVoiceMail.handleIncomingXmpp(sender, to, messageBody)
+
+        except XmppVoiceMailException as e:
+            # Reply back letting the sender know what went wrong.
+            message.reply(e.value)
+        except:
+            logging.exception(sys.exc_info()[0])
+            message.reply("Unexpected error:" + str(sys.exc_info()[0]))
 
 
 class XmppPresenceHandler(webapp2.RequestHandler):
@@ -245,11 +279,7 @@ class InviteHandler(webapp2.RequestHandler):
             self.response.out.write('Sent invitation for ' + fromJid + "<br/>")
 
         self.response.out.write('</body></html>')
-        
 
-class MailHandler(InboundMailHandler):
-    def receive(self, mail_message):
-        xmppVoiceMail.handleIncomingEmail(mail_message)
 
 def handle_404(request, response, exception):
     logging.exception(exception)

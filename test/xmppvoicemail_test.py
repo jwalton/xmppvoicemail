@@ -5,7 +5,7 @@ from google.appengine.ext import testbed
 from google.appengine.api import xmpp
 
 
-from xmppvoicemail import Owner, XmppVoiceMail
+from xmppvoicemail import Owner, XmppVoiceMail, InvalidParametersException
 from models import Contact
 import phonenumberutils
 
@@ -43,12 +43,12 @@ class CommunicationsFixture:
         return self.ownerOnline
 
     def sendSMS(self, toNumber, body):
-        self.xmppInvites.append({
+        self.sms.append({
             "toNumber": toNumber,
             "body": body
         })
 
-class SmsTestCases(unittest.TestCase):
+class XmppVoiceMailTestCases(unittest.TestCase):
     def setUp(self):
         # Set up Google App Engine testbed
         self.testbed = testbed.Testbed()
@@ -82,7 +82,7 @@ class SmsTestCases(unittest.TestCase):
     def createContact(self, subscribed):
         # Create a known contact
         Contact(
-            name = "mrTest",
+            name = "mrtest",
             phoneNumber = self.contactNumber,
             normalizedPhoneNumber=phonenumberutils.toNormalizedNumber(self.contactNumber),
             subscribed=subscribed).save()        
@@ -100,10 +100,10 @@ class SmsTestCases(unittest.TestCase):
         self.xmppvoicemail.handleIncomingSms("+16135551234", self.ownerPhoneNumber, "Hello")
         
         # Should get an email, since user is not subscribed to xmppVoiceMail via XMPP.
-        self.assertEqual(1, len(self.communications.mails), "Should have received an email.")
+        self.assertEqual(1, len(self.communications.mails), "Should have sent an email.")
         message = self.communications.mails[0]
         self.assertEqual(
-            '"xmppVoiceMail" <16135551234' + self.MAIL_SUFFIX +'>',
+            '"xmppvoicemail" <16135551234' + self.MAIL_SUFFIX +'>',
             message['sender'])
         self.assertEqual(self.ownerEmailAddress, message['to'])
         self.assertEqual("Hello", message['subject'])
@@ -116,10 +116,10 @@ class SmsTestCases(unittest.TestCase):
         self.xmppvoicemail.handleIncomingSms("+16135551234", self.ownerPhoneNumber, "Hello")
         
         # Should get an XMPP from the default sender.
-        self.assertEqual(1, len(self.communications.xmppMessages), "Should have received an XMPP message")
+        self.assertEqual(1, len(self.communications.xmppMessages), "Should have sent an XMPP message")
         message = self.communications.xmppMessages[0]
         self.assertEqual(
-            'xmppVoiceMail' + self.XMPP_SUFFIX,
+            'xmppvoicemail' + self.XMPP_SUFFIX,
             message['fromJid'])
         self.assertEqual(self.ownerJid, message['toJid'])
         self.assertEqual("(613)555-1234: Hello", message['message'])
@@ -135,10 +135,10 @@ class SmsTestCases(unittest.TestCase):
         self.xmppvoicemail.handleIncomingSms(self.contactNumber, self.ownerPhoneNumber, "Hello")
         
         # Should get an XMPP from the default sender.
-        self.assertEqual(1, len(self.communications.xmppMessages), "Should have received an XMPP message")
+        self.assertEqual(1, len(self.communications.xmppMessages), "Should have sent an XMPP message")
         message = self.communications.xmppMessages[0]
         self.assertEqual(
-            'xmppVoiceMail' + self.XMPP_SUFFIX,
+            'xmppvoicemail' + self.XMPP_SUFFIX,
             message['fromJid'])
         self.assertEqual(self.ownerJid, message['toJid'])
         self.assertEqual("(613)555-1234: Hello", message['message'])
@@ -154,10 +154,10 @@ class SmsTestCases(unittest.TestCase):
         self.xmppvoicemail.handleIncomingSms(self.contactNumber, self.ownerPhoneNumber, "Hello")
         
         # Should get an XMPP from the contact.
-        self.assertEqual(1, len(self.communications.xmppMessages), "Should have received an XMPP message")
+        self.assertEqual(1, len(self.communications.xmppMessages), "Should have sent an XMPP message")
         message = self.communications.xmppMessages[0]
         self.assertEqual(
-            'mrTest' + self.XMPP_SUFFIX,
+            'mrtest' + self.XMPP_SUFFIX,
             message['fromJid'])
         self.assertEqual(self.ownerJid, message['toJid'])
         self.assertEqual("Hello", message['message'])
@@ -176,15 +176,47 @@ class SmsTestCases(unittest.TestCase):
         self.xmppvoicemail.handleIncomingSms(self.contactNumber, self.ownerPhoneNumber, "Hello")
         
         # Should get an email, since owner is offline.
-        self.assertEqual(1, len(self.communications.mails), "Should have received an email.")
+        self.assertEqual(1, len(self.communications.mails), "Should have sent an email.")
         message = self.communications.mails[0]
         self.assertEqual(
-            '"mrTest" <16135551234' + self.MAIL_SUFFIX +'>',
+            '"mrtest" <16135551234' + self.MAIL_SUFFIX +'>',
             message['sender'])
         self.assertEqual(self.ownerEmailAddress, message['to'])
         self.assertEqual("Hello", message['subject'])
 
-# TODO: Incoming XMPP tests
+    def test_incomingXmppForNumber(self):
+        self.xmppvoicemail.handleIncomingXmpp(
+            sender=self.ownerJid,
+            to='xmppVoiceMail' + self.XMPP_SUFFIX,
+            messageBody="(613)555-1234: Hello")
+        
+        # Should send an SMS to 555-1234
+        self.assertEqual(1, len(self.communications.sms), "Should have sent an SMS")
+        sms = self.communications.sms[0]
+        self.assertEqual("+16135551234", sms["toNumber"])
+        self.assertEqual("Hello", sms["body"])
+
+    def test_incomingXmppForContact(self):
+        self.createContact(subscribed=True)
+
+        self.xmppvoicemail.handleIncomingXmpp(
+            sender=self.ownerJid,
+            to='mrtest' + self.XMPP_SUFFIX,
+            messageBody="Hello")
+        
+        # Should send an SMS to 555-1234
+        self.assertEqual(1, len(self.communications.sms), "Should have sent an SMS")
+        sms = self.communications.sms[0]
+        self.assertEqual("+16135551234", sms["toNumber"])
+        self.assertEqual("Hello", sms["body"])
+
+    def test_incomingXmppForInvalidNumber(self):
+        with self.assertRaises(InvalidParametersException):
+            self.xmppvoicemail.handleIncomingXmpp(
+                sender=self.ownerJid,
+                to='xmppVoiceMail' + self.XMPP_SUFFIX,
+                messageBody="(613)555-123a: Hello")
+        
 
 # TODO: Incoming email tests
 
