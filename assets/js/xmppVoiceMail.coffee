@@ -20,6 +20,7 @@
     window.LoginView = Backbone.View.extend
         events:
             'click .loginButton'    : 'login'
+            'keypress input'        : 'loginOnEnter'
 
         initialize: () ->
             _.bindAll this, "render"
@@ -30,15 +31,20 @@
             $(@el).html(renderedContent)
             return this
 
-        login: () ->
-            # TODO: We should probably escape the password here or encode it or something?
+        loginOnEnter: (event) ->
+            if (event.keyCode == 13)
+                @login(event)
+
+        login: (event) ->
+            # TODO: Do we need to escape the password here or encode it or something?
+            event.preventDefault()
             self = this
             $.ajax
                 type: 'POST'
                 url: '/api/login'
-                data: 'password=' + @$('.password').val
+                data: 'password=' + @$('.password').val()
                 success: () ->
-                    window.app.navigate 'contacts', trigger: true
+                    window.app.navigate 'contacts', true
 
                 error: (xhr, textStatus, errorThrown) ->
                     errorMessage = ""
@@ -91,6 +97,7 @@
     window.ContactEditorView = Backbone.View.extend
         events:
             'click .addButton'    : 'addNewContact'
+            'keypress input'      : 'addNewContactOnEnter'
             'click .deleteButton' : 'deleteContacts'
 
         initialize: () ->
@@ -141,7 +148,14 @@
 
             return answer
 
-        addNewContact: () ->
+
+        addNewContactOnEnter: (event) ->
+            if (event.keyCode == 13)
+                @addNewContact(event)
+
+        addNewContact: (event) ->
+            event.preventDefault()
+
             @$('.addButton').attr("disabled", true)
 
             @$('.errorText').html ""
@@ -158,12 +172,16 @@
 
             @collection.create newContact, {wait: true, error: onError}
 
+            return false
+
         deleteContacts: () ->
             selectedRows = @getSelectedRows()
             for row in selectedRows
                 model = row.model           
                 if not model.get 'isDefaultSender'
                     model.destroy()
+
+            return false
 
     
     window.contacts = new window.Contacts()
@@ -180,7 +198,6 @@
 
             @contactEditorView = new ContactEditorView
                 collection: window.contacts
-            contacts.fetch()
 
         login: () ->
             @$main.empty()
@@ -188,6 +205,7 @@
 
 
         contactEditor: () ->
+            window.contacts.fetch()
             @$main.empty()
             @$main.append @contactEditorView.render().el
 

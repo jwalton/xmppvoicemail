@@ -84,7 +84,7 @@ class MailHandler(InboundMailHandler):
             xmppVoiceMail.handleIncomingEmail(sender, to, subject, messageBody)
             
         except InvalidParametersException as e:
-            xmppVoiceMail.sendMessageToOwner(e.value)
+            xmppVoiceMail.sendEmailMessageToOwner("Re:" + subject, e.value)
             
         except PermissionException as e:
             logging.error(str(e))
@@ -181,7 +181,10 @@ class LoginHandler(BaseApiHandler):
             
     def post(self):
         password = self.request.get("password")
-        if password == config.ADMIN_PASSWORD:
+        if config.ADMIN_PASSWORD == 'secret':
+            # User hasn't changed their admin password yet.  :(
+            raise errors.ValidationError("You must change your password in config.py and re-deploy the app.")
+        elif password == config.ADMIN_PASSWORD:
             self.session['user'] = True
         else:
             raise errors.BadPasswordError("Incorrect password.")

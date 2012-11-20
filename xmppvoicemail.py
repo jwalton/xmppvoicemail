@@ -23,14 +23,14 @@ class XmppVoiceMailException(Exception):
     def __str__(self):
         return repr(self.value)
 
-class PermissionException(Exception):
+class PermissionException(XmppVoiceMailException):
     """ Thrown when an attempt is made to access a service by a user with insufficient permissions.
     """
     def __init__(self, value):
         super(PermissionException, self).__init__(value)
     
 
-class InvalidParametersException(Exception):
+class InvalidParametersException(XmppVoiceMailException):
     """ Thrown when parameters passed to a method are invalid.
     """
     def __init__(self, value):
@@ -63,7 +63,7 @@ class Communications:
         xmpp.send_invite(toJid, fromJid)
         
     def getXmppPresence(self, jid):
-        return xmpp.get_presence(self._owner.jid)
+        return xmpp.get_presence(jid)
 
     def sendSMS(self, toNumber, body):
         logging.info("SMS to " + toNumber + ": " + body)
@@ -253,7 +253,7 @@ class XmppVoiceMail:
                       ((not contact.subscribed) and (not defaultSender.subscribed)) 
                 
         if sendByEmail:
-            self._sendEmailMessage(
+            self.sendEmailMessageToOwner(
                 subject=message,
                 fromContact=contact,
                 fromNumber=fromNumber)
@@ -287,7 +287,7 @@ class XmppVoiceMail:
         return self._communications.sendXmppMessage(fromJid, self._owner.jid, message)
 
 
-    def _sendEmailMessage(self, subject, body=None, fromContact=None, fromNumber=None):
+    def sendEmailMessageToOwner(self, subject, body=None, fromContact=None, fromNumber=None):
         if not body:
             body = ""
 

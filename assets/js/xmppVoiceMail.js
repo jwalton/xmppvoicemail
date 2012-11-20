@@ -15,7 +15,8 @@
   });
   window.LoginView = Backbone.View.extend({
     events: {
-      'click .loginButton': 'login'
+      'click .loginButton': 'login',
+      'keypress input': 'loginOnEnter'
     },
     initialize: function() {
       _.bindAll(this, "render");
@@ -27,17 +28,21 @@
       $(this.el).html(renderedContent);
       return this;
     },
-    login: function() {
+    loginOnEnter: function(event) {
+      if (event.keyCode === 13) {
+        return this.login(event);
+      }
+    },
+    login: function(event) {
       var self;
+      event.preventDefault();
       self = this;
       return $.ajax({
         type: 'POST',
         url: '/api/login',
         data: 'password=' + this.$('.password').val(),
         success: function() {
-          return window.app.navigate('contacts', {
-            trigger: true
-          });
+          return window.app.navigate('contacts', true);
         },
         error: function(xhr, textStatus, errorThrown) {
           var errorMessage, errorResult;
@@ -89,6 +94,7 @@
   window.ContactEditorView = Backbone.View.extend({
     events: {
       'click .addButton': 'addNewContact',
+      'keypress input': 'addNewContactOnEnter',
       'click .deleteButton': 'deleteContacts'
     },
     initialize: function() {
@@ -143,8 +149,14 @@
       }
       return answer;
     },
-    addNewContact: function() {
+    addNewContactOnEnter: function(event) {
+      if (event.keyCode === 13) {
+        return this.addNewContact(event);
+      }
+    },
+    addNewContact: function(event) {
       var newContact, onError;
+      event.preventDefault();
       this.$('.addButton').attr("disabled", true);
       this.$('.errorText').html("");
       newContact = {
@@ -157,25 +169,23 @@
         this.$('.errorText').html(errorResult.error);
         return this.$('.addButton').attr("disabled", false);
       };
-      return this.collection.create(newContact, {
+      this.collection.create(newContact, {
         wait: true,
         error: onError
       });
+      return false;
     },
     deleteContacts: function() {
-      var model, row, selectedRows, _i, _len, _results;
+      var model, row, selectedRows, _i, _len;
       selectedRows = this.getSelectedRows();
-      _results = [];
       for (_i = 0, _len = selectedRows.length; _i < _len; _i++) {
         row = selectedRows[_i];
         model = row.model;
         if (!model.get('isDefaultSender')) {
-          _results.push(model.destroy());
-        } else {
-          _results.push(void 0);
+          model.destroy();
         }
       }
-      return _results;
+      return false;
     }
   });
   window.contacts = new window.Contacts();
@@ -187,16 +197,16 @@
     initialize: function() {
       this.loginView = new LoginView();
       this.$main = $('#main');
-      this.contactEditorView = new ContactEditorView({
+      return this.contactEditorView = new ContactEditorView({
         collection: window.contacts
       });
-      return contacts.fetch();
     },
     login: function() {
       this.$main.empty();
       return this.$main.append(this.loginView.render().el);
     },
     contactEditor: function() {
+      window.contacts.fetch();
       this.$main.empty();
       return this.$main.append(this.contactEditorView.render().el);
     }
