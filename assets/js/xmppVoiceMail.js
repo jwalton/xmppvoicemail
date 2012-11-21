@@ -1,4 +1,22 @@
 (function($) {
+  var apiErrorHandler, showMessage;
+  showMessage = function($messageEl, message) {
+    return $messageEl.html(message);
+  };
+  apiErrorHandler = function($errorEl, xhr) {
+    var errorMessage, errorResult;
+    errorMessage = "";
+    try {
+      errorResult = $.parseJSON(xhr.responseText);
+      errorMessage = errorResult.error;
+    } catch (e) {
+      errorMessage = xhr.responseText;
+      if (!errorMessage) {
+        errorMessage = "Error: " + xhr.status;
+      }
+    }
+    return showMessage($errorEl, errorMessage);
+  };
   window.Contact = Backbone.Model.extend({
     defaults: function() {
       return {
@@ -45,18 +63,7 @@
           return window.app.navigate('contacts', true);
         },
         error: function(xhr, textStatus, errorThrown) {
-          var errorMessage, errorResult;
-          errorMessage = "";
-          try {
-            errorResult = $.parseJSON(xhr.responseText);
-            errorMessage = errorResult.error;
-          } catch (e) {
-            errorMessage = xhr.responseText;
-            if (!errorMessage) {
-              errorMessage = "Error: " + xhr.status;
-            }
-          }
-          return self.$('.errorText').html(errorMessage);
+          return apiErrorHandler(self.$('.errorText'), xhr);
         }
       });
     }
@@ -95,7 +102,8 @@
     events: {
       'click .addButton': 'addNewContact',
       'keypress input': 'addNewContactOnEnter',
-      'click .deleteButton': 'deleteContacts'
+      'click .deleteButton': 'deleteContacts',
+      'click .inviteButton': 'inviteContacts'
     },
     initialize: function() {
       _.bindAll(this, "render");
@@ -124,14 +132,14 @@
       return this;
     },
     childSelected: function(selected) {
-      var deleteButton, selectedRows;
-      deleteButton = this.$('deleteButton');
+      var $enabledWhenSelectionButtons, selectedRows;
+      $enabledWhenSelectionButtons = this.$('.enabledWhenUsersSelected');
       console.log(this);
       selectedRows = this.getSelectedRows();
       if (selectedRows.length > 0) {
-        return this.$('.deleteButton').removeAttr('disabled');
+        return $enabledWhenSelectionButtons.removeAttr('disabled');
       } else {
-        return this.$('.deleteButton').attr('disabled', true);
+        return $enabledWhenSelectionButtons.attr('disabled', true);
       }
     },
     getSelectedRows: function() {
@@ -185,6 +193,25 @@
           model.destroy();
         }
       }
+      return false;
+    },
+    inviteContacts: function() {
+      var selectedIds, self;
+      self = this;
+      selectedIds = _.map(this.getSelectedRows(), function(row) {
+        return row.model.id;
+      });
+      $.ajax({
+        type: 'POST',
+        url: '/api/invite',
+        data: JSON.stringify(selectedIds),
+        success: function(data, textStatus, xhr) {
+          return showMessage(self.$('.errorText'), "" + data.length + " invite" + (data.length !== 1 ? "s" : "") + " sent.");
+        },
+        error: function(xhr, textStatus, errorThrown) {
+          return apiErrorHandler(self.$('.errorText'), xhr);
+        }
+      });
       return false;
     }
   });

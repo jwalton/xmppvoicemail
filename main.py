@@ -265,23 +265,20 @@ class AdminContactsHandler(AuthenticatedApiHandler):
     # TODO: Add put support for edits.
         
 
-class InviteHandler(webapp2.RequestHandler):
-    # TODO: Handle XMPP subscriptions better - convert this to an API handler and add a button to the UI to call it.
-    def get(self):
-        self.post()
-
+class InviteHandler(AuthenticatedApiHandler):
     def post(self):
-        self.response.out.write('<html><body>')
-
         appId = app_identity.get_application_id()
-        
-        contacts = Contact.all()
-        for contact in contacts:
+
+        idsToInvite = json.loads(self.request.body)
+        invited = []
+        for contactId in idsToInvite:
+            contact = Contact.getByIdString(contactId)
             fromJid = contact.name + "@" + appId + ".appspotchat.com"
             xmpp.send_invite(config.USERJID, fromJid)
-            self.response.out.write('Sent invitation for ' + fromJid + "<br/>")
+            invited.append(fromJid)
 
-        self.response.out.write('</body></html>')
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.out.write(json.dumps(invited))
 
 
 def handle_404(request, response, exception):
@@ -299,11 +296,11 @@ def main():
         (r'/recording', PostRecording),
         (r'/call', CallHandler),
         (r'/sms', SMSHandler),
-        (r'/invite', InviteHandler),
         
+        (r'/api/login', LoginHandler),
         (r'/api/admin/contacts', AdminContactsHandler),
         (r'/api/admin/contacts/(.*)', AdminContactsHandler),
-        (r'/api/login', LoginHandler),
+        (r'/api/invite', InviteHandler),
         
         (r'/_ah/xmpp/message/chat/', XMPPHandler),
         (r'/_ah/xmpp/presence/(available|unavailable)/', XmppPresenceHandler),

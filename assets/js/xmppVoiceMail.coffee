@@ -1,4 +1,20 @@
 (($) ->
+
+    showMessage = ($messageEl, message) ->
+        $messageEl.html message 
+
+    apiErrorHandler = ($errorEl, xhr) ->
+        errorMessage = ""
+        try
+            errorResult = $.parseJSON xhr.responseText
+            errorMessage = errorResult.error
+        catch e
+            errorMessage = xhr.responseText
+            if !errorMessage
+                errorMessage = "Error: " + xhr.status
+
+        showMessage $errorEl, errorMessage
+
     #### A contact
     # Has the following fields:
     #  - `name` the nickname for this contact.
@@ -47,18 +63,7 @@
                     window.app.navigate 'contacts', true
 
                 error: (xhr, textStatus, errorThrown) ->
-                    errorMessage = ""
-                    try
-                        errorResult = $.parseJSON xhr.responseText
-                        errorMessage = errorResult.error
-                    catch e
-                        errorMessage = xhr.responseText
-                        if !errorMessage
-                            errorMessage = "Error: " + xhr.status
-
-                    self.$('.errorText').html errorMessage
-
-
+                    apiErrorHandler self.$('.errorText'), xhr
 
     window.ContactView = Backbone.View.extend
         tagName: 'li'
@@ -99,6 +104,7 @@
             'click .addButton'    : 'addNewContact'
             'keypress input'      : 'addNewContactOnEnter'
             'click .deleteButton' : 'deleteContacts'
+            'click .inviteButton' : 'inviteContacts'
 
         initialize: () ->
             _.bindAll this, "render"
@@ -126,14 +132,14 @@
             return this
 
         childSelected: (selected) ->
-            deleteButton = @$('deleteButton')
+            $enabledWhenSelectionButtons = @$('.enabledWhenUsersSelected')
 
             console.log this
             selectedRows = @getSelectedRows()
             if selectedRows.length > 0
-                @$('.deleteButton').removeAttr('disabled')
+                $enabledWhenSelectionButtons.removeAttr('disabled')
             else
-                @$('.deleteButton').attr('disabled', true)
+                $enabledWhenSelectionButtons.attr('disabled', true)
 
             # TODO: Activate/deactivate delete button
 
@@ -180,6 +186,22 @@
                 model = row.model           
                 if not model.get 'isDefaultSender'
                     model.destroy()
+
+            return false
+
+        inviteContacts: () ->
+            self = this
+            selectedIds = _.map @getSelectedRows(), (row) ->
+                row.model.id
+            $.ajax
+                type: 'POST'
+                url: '/api/invite'
+                data: JSON.stringify(selectedIds)
+                success: (data, textStatus, xhr) ->
+                    showMessage self.$('.errorText'), "#{data.length} invite#{if data.length != 1 then "s" else ""} sent."
+
+                error: (xhr, textStatus, errorThrown) ->
+                    apiErrorHandler self.$('.errorText'), xhr
 
             return false
 

@@ -3,9 +3,14 @@ from google.appengine.ext import db
 import phonenumberutils
 
 def _getObjectByIdString(clazz, idString):
-    if idString.isdigit():
+    if isinstance(idString, int):
+        # Already an int
+        return clazz.get_by_id(idString)
+    
+    elif idString.isdigit():
         objectId = int(idString)
         return clazz.get_by_id(objectId)
+    
     else:
         return clazz.get_by_key_name(idString)
 
