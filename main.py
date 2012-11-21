@@ -15,7 +15,7 @@ from google.appengine.ext.webapp import template
 from google.appengine.ext.webapp.mail_handlers import InboundMailHandler
 from google.appengine.api import xmpp, app_identity
 
-import phonenumberutils
+from util import phonenumberutils
 from xmppvoicemail import XmppVoiceMail, Owner, XmppVoiceMailException, PermissionException, InvalidParametersException
 from models import XmppUser, Contact
 import errors
@@ -148,7 +148,7 @@ class XmppSubscribeHandler(webapp2.RequestHandler):
                 contact.subscribed = False
             else:
                 contact.subscribed = True
-            contact.put()
+            Contact.update(contact)
 
 class BaseApiHandler(webapp2.RequestHandler):
     def handle_exception(self, exception, debug):

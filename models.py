@@ -1,6 +1,7 @@
 from google.appengine.ext import db
+from google.appengine.api import memcache
 
-import phonenumberutils
+from util import phonenumberutils
 
 def _getObjectByIdString(clazz, idString):
     if isinstance(idString, int):
@@ -24,6 +25,8 @@ class XmppUser(db.Model):
     def getByJid(jid):
         q = db.GqlQuery("SELECT * FROM XmppUser WHERE jid = :1", jid)
         return q.get()
+
+_DEFAULT_SENDER_MEMCACHE_KEY = 'Contact:DEFAULT_SENDER'
 
 class Contact(db.Model):
     """Stores information about a contact.
@@ -73,10 +76,25 @@ class Contact(db.Model):
         return q.get()
     
     @staticmethod
+    def update(contact):
+        if contact.isDefaultSender():
+            memcache.set(_DEFAULT_SENDER_MEMCACHE_KEY, contact)
+                    
+        contact.put()
+            
+    
+    @staticmethod
     def getDefaultSender():
         # TODO: Think about using some caching here, since we get this guy
         # all the time.
-        return Contact.get_or_insert("DEFAULT_SENDER",
-            name="xmppVoiceMail".lower(),
-            phoneNumber="*",
-            normalizedPhoneNumber="*")
+        defaultSender = memcache.get(_DEFAULT_SENDER_MEMCACHE_KEY)
+        if defaultSender is not None:
+            return defaultSender
+        else:
+            defaultSender = Contact.get_or_insert("DEFAULT_SENDER",
+                name="xmppVoiceMail".lower(),
+                phoneNumber="*",
+                normalizedPhoneNumber="*")
+            memcache.add(_DEFAULT_SENDER_MEMCACHE_KEY, defaultSender)
+            return defaultSender
+        

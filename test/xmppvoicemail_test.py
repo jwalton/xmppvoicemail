@@ -7,7 +7,7 @@ from google.appengine.api import xmpp
 
 from xmppvoicemail import Owner, XmppVoiceMail, InvalidParametersException, PermissionException
 from models import Contact
-import phonenumberutils
+from util import phonenumberutils
 
 class CommunicationsFixture:
     def __init__(self):
@@ -54,6 +54,7 @@ class XmppVoiceMailTestCases(unittest.TestCase):
         self.testbed = testbed.Testbed()
         self.testbed.activate()
         self.testbed.init_datastore_v3_stub()
+        self.testbed.init_memcache_stub()
         self.testbed.init_app_identity_stub()
         
         self.contactNumber = "+16135551234"
@@ -73,7 +74,7 @@ class XmppVoiceMailTestCases(unittest.TestCase):
         # Subscribe the default sender.
         defaultSender = Contact.getDefaultSender()
         defaultSender.subscribed = True
-        defaultSender.put()
+        Contact.update(defaultSender)
         
         
     def tearDown(self):
@@ -94,7 +95,7 @@ class XmppVoiceMailTestCases(unittest.TestCase):
         # Unsubscribe the default sender.
         defaultSender = Contact.getDefaultSender()
         defaultSender.subscribed = False
-        defaultSender.put()
+        Contact.update(defaultSender)
 
         # Send the SMS
         self.xmppvoicemail.handleIncomingSms("+16135551234", self.ownerPhoneNumber, "Hello")
