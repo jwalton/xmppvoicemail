@@ -1,7 +1,8 @@
 # Ignore pyc files
 *.pyc
-# Ignore config.py
+# Ignore config.py and app.yaml
 config.py
+app.yaml
 # Ignore pydev project files
 .project
 .pydevproject

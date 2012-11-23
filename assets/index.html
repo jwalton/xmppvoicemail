@@ -77,11 +77,11 @@
                 background-color: #DDD;
             }
 
-            .listItem:hover:nth-child(even) {
+            .listItem.selectable:hover:nth-child(even) {
                 background-color: #EEF;
             }
 
-            .listItem:hover {
+            .listItem.selectable:hover {
                 background-color: #CCD;
             }
 
@@ -124,6 +124,24 @@
                 color: #D00;
             }
 
+
+            .logTime {
+                display: inline-block;
+                width: 100px;
+            }
+
+            .logDirection {
+                display: inline-block;
+                width: 30px;
+                text-align: center;                
+            }
+
+            .logContact {
+                display: inline-block;
+                width: 160px;
+            }
+
+
         </style>
         <title></title>
         <!-- Place favicon.ico and apple-touch-icon.png in the root directory -->
@@ -135,17 +153,6 @@
                 <input class="loginButton" type="button" value="Login"></input>
             </form>
             <div class="errorText"></div>
-        </script>
-
-        <script type="text/template" id="contact-template">
-            <!-- <div class="listItemControls"><img src="images/editicon.png"></div> -->
-            <% if(subscribed) { %>
-                <span class="subscribed contactSubscribed">&#x2714;</span>
-            <% } else { %>
-                <span class="subscribed contactUnsubscribed">&#x2716;</span>
-            <% } %>
-            <span class="contactName"><%= name %></span>
-            <span class="contactNumber"><%= phoneNumber %></span>
         </script>
 
         <script type="text/template" id="contact-list-template">
@@ -169,7 +176,54 @@
                 <input class="inviteButton enabledWhenUsersSelected" type="button" value="Send Invite" disabled="true"></input>
             <div class="errorText"></div>
         </script>
-    </head>
+
+        <script type="text/template" id="contact-template">
+            <!-- <div class="listItemControls"><img src="images/editicon.png"></div> -->
+            <% if(subscribed) { %>
+                <span class="subscribed contactSubscribed">&#x2714;</span>
+            <% } else { %>
+                <span class="subscribed contactUnsubscribed">&#x2716;</span>
+            <% } %>
+            <span class="contactName"><%= name %></span>
+            <span class="contactNumber"><%= phoneNumber %></span>
+        </script>
+
+        <script type="text/template" id="log-list-template">
+            <h1>Log</h1>
+            <ul class="listContainer">
+                <li class="listHeader">
+                    <span class="logDirection">Dir</span>
+                    <span class="logContact">Contact</span>
+                    <span class="logTime">Time</span>
+                    <span class="logMessage">Message</span>
+                </li>
+            </ul>
+            <ul class="listContainer logEntries">
+            </ul>
+        </script>  
+
+        <script type="text/template" id="log-entry-template">
+            <li class="listItem">
+                <% if(direction == "from") { %>
+                    <span class="logDirection">&#x21FE;</span>
+                <% } else { %>
+                    <span class="logDirection">&#x21FD;</span>
+                <% } %>
+                <span class="logContact"><%= contact %></span>
+                <span class="logTime"><%= timeStr %></span>
+                <span class="logMessage"><%= message %></span>
+            </li>
+        </script>
+      
+        <script type="text/template" id="sms-widget">
+            <form class="smsWidgetForm">
+                <input class="nameInput" type="text" placeholder="Name"></input>
+                <input class="numberInput" type="text" placeholder="(xxx) xxx-xxxx"></input>
+                <input class="messageInput" type="text" placeholder="Message"></input>
+                <input class="addButton" type="button" value="+"></input>
+            </form>
+        </script>
+      </head>
     <body>
         <!--[if lt IE 7]>
             <p class="chromeframe">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> or <a href="http://www.google.com/chromeframe/?redirect=true">activate Google Chrome Frame</a> to improve your experience.</p>

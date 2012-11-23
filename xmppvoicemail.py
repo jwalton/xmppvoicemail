@@ -3,6 +3,7 @@ import re
 import base64
 import logging
 import urllib
+import time
 
 from google.appengine.api import mail
 from google.appengine.api import urlfetch
@@ -11,7 +12,8 @@ from google.appengine.api import xmpp
 
 import config
 
-from phonenumberutils import  toPrettyNumber, stripNumber, toNormalizedNumber, validateNumber
+from util.phonenumberutils import  toPrettyNumber, stripNumber, toNormalizedNumber, validateNumber
+from util.circularbuffer import ThreadSafeCircularBuffer
 from models import XmppUser, Contact
 
 class XmppVoiceMailException(Exception):
@@ -40,10 +42,11 @@ class Owner:
     """ Represents the owner of an XmppVoiceMail
     """
     
-    def __init__(self, phoneNumber, jid, emailAddress):
+    def __init__(self, phoneNumber, jid, emailAddress, logSize=0):
         self.phoneNumber = phoneNumber
         self.jid = jid
         self.emailAddress = emailAddress
+        self.logSize = logSize
 
 class Communications:
     def __init__(self):
@@ -85,7 +88,42 @@ class Communications:
                                     headers={'Content-Type': 'application/x-www-form-urlencoded',
                                              "Authorization": "Basic %s" % (base64.encodestring(config.TWILIO_ACID + ":" + config.TWILIO_AUTH)[:-1]).replace('\n', '') })
             logging.debug('reply content: ' + result.content)
+
+class LogItem:
+    """
+    An item in the XmppVoiceMail log.
+    """
     
+    TO_OWNER = "to"
+    FROM_OWNER = "from"
+    
+    def __init__(self, direction, contact, message):
+        """ Create a new log item.
+        
+        'direction' is either TO_OWNER or FROM_OWNER.
+        'contact' is the name of the contact who sent/received this message,
+          or the phone number if there is no contact.
+        'message' is the message to log.
+        """
+        self.time = time.mktime(time.gmtime())
+        self.direction = direction
+        self.contact = contact
+        self.message = message
+        
+    def toDict(self):
+        return {
+            "time": self.time * 1000,
+            "direction": self.direction,
+            "contact": self.contact,
+            "message": self.message
+        }
+                
+    def __str__(self):
+        return self.direction + " owner: " + self.contact + " " + self.message
+
+    def __repr__(self):
+        return self.__str__()
+
 class XmppVoiceMail:
     """
     Represents a virtual cell phone, which can receive SMS messages and voicemail.
@@ -94,6 +132,17 @@ class XmppVoiceMail:
         self._APP_ID = app_identity.get_application_id()
         self._owner = owner
         self._communications = Communications()
+        self._messageLog = ThreadSafeCircularBuffer(owner.logSize)
+
+    def _log(self, direction, contact, message):
+        if isinstance(contact, Contact):
+            contact = contact.name
+            
+        logItem = LogItem(direction, contact, message)
+        self._messageLog.addItem(logItem)
+
+    def getLog(self):
+        return self._messageLog.getItems()
 
     def handleIncomingCall(self, fromNumber, callStatus):
         """Handle an incoming call.
@@ -109,34 +158,42 @@ class XmppVoiceMail:
             
         self.sendMessageToOwner("Call from: " + displayFrom + " status:" + callStatus, contact, fromNumber)
 
-    def handleVoiceMail(self, fromNumber, transcriptionText=None, recordingUrl=None):
-        """Handle an incoming voice mail.
-        """
-        displayFrom = toPrettyNumber(fromNumber)
+    def getDisplayNameAndContact(self, fromNumber):
+        displayName = toPrettyNumber(fromNumber)
         
         # Find the XMPP user to send this from
         contact = Contact.getByPhoneNumber(fromNumber)
         if contact:
-            displayFrom = contact.name
+            displayName = contact.name
         else:
             contact = Contact.getDefaultSender()
+            
+        return (displayName, contact)
+        
 
-        body = "New message from " + displayFrom
+    def handleVoiceMail(self, fromNumber, transcriptionText=None, recordingUrl=None):
+        """Handle an incoming voice mail.
+        """
+        displayName, contact = self.getContactAndDisplayName(fromNumber)
+
+        body = "New message from " + displayName
         if transcriptionText:
             body += ": " + transcriptionText
             
         if recordingUrl:
             body += " - Recording: " + recordingUrl
             
+        self._log(LogItem.TO_OWNER, displayName, body)
         return self.sendMessageToOwner(body, contact, fromNumber)
 
     def handleIncomingSms(self, fromNumber, toNumber, body):
         """Handle an incoming SMS message from the network.
         """
+
         # Find the XMPP user to send this from
-        contact = Contact.getByPhoneNumber(fromNumber)
-        if not contact:
-            contact = Contact.getDefaultSender()
+        displayName, contact = self.getDisplayNameAndContact(fromNumber)
+        
+        self._log(LogItem.TO_OWNER, displayName, body)
             
         # Forward the message to the owner
         self.sendMessageToOwner(body, contact, fromNumber)
@@ -167,6 +224,9 @@ class XmppVoiceMail:
 
     def _forwardToSms(self, to, messageBody):
         toNumber, body = self._getNumberAndBody(to, messageBody)
+
+        self._log(LogItem.FROM_OWNER, to, body)
+
         self._communications.sendSMS(toNumber, body)
 
 

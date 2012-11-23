@@ -6,6 +6,7 @@ import logging
 import os
 import json
 import sys
+import time
 
 import webapp2
 from webapp2_extras import sessions
@@ -22,7 +23,7 @@ import errors
 
 import config
 
-owner = Owner(config.TWILIO_NUMBER, config.USERJID, config.USER_EMAIL)
+owner = Owner(config.TWILIO_NUMBER, config.USERJID, config.USER_EMAIL, config.LOG_SIZE)
 xmppVoiceMail = XmppVoiceMail(owner)
 
 class CallHandler(webapp2.RequestHandler):
@@ -264,6 +265,18 @@ class AdminContactsHandler(AuthenticatedApiHandler):
         
     # TODO: Add put support for edits.
         
+class AdminLogHandler(AuthenticatedApiHandler):
+    # Handle REST API calls for log entries    
+    def get(self):
+        logItems = xmppVoiceMail.getLog()
+        logItemsJson = [logItem.toDict() for logItem in logItems]
+        answer = {
+            "now": time.mktime(time.gmtime()) * 1000,
+            "logItems": logItemsJson
+        }
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps(answer))
+
 
 class InviteHandler(AuthenticatedApiHandler):
     def post(self):
@@ -300,6 +313,7 @@ def main():
         (r'/api/login', LoginHandler),
         (r'/api/admin/contacts', AdminContactsHandler),
         (r'/api/admin/contacts/(.*)', AdminContactsHandler),
+        (r'/api/admin/log', AdminLogHandler),
         (r'/api/invite', InviteHandler),
         
         (r'/_ah/xmpp/message/chat/', XMPPHandler),

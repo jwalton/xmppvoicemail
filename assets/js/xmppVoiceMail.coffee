@@ -1,5 +1,8 @@
 (($) ->
 
+    # View to display after logging in.
+    defaultView = "main"
+
     showMessage = ($messageEl, message) ->
         $messageEl.html message 
 
@@ -15,11 +18,44 @@
 
         showMessage $errorEl, errorMessage
 
+    SECOND = 1000
+    MINUTE = SECOND * 60
+    HOUR = MINUTE * 60
+    DAY = HOUR * 24
+
+    formatTime = (time, now) ->
+        if typeof time is "number"
+            time = new Date time
+        if now
+            if typeof now is "number"
+                now = new Date now
+        else
+            now = new Date
+
+        answer = ""
+
+        delta = now.getTime() - time.getTime()
+        if delta < 0
+            answer = "now"
+        else if delta < MINUTE
+            answer = "#{(delta / SECOND).toFixed 0}s ago"
+        else if delta < HOUR
+            answer = "#{(delta / MINUTE).toFixed 0}m ago"
+        else if delta < DAY
+            answer = "#{time.getHours()}:#{time.getMinutes()}"
+        else if delta < (DAY * 31)
+            answer = "This month"
+        else
+            answer = "Long ago"
+
+        return answer
+
     #### A contact
     # Has the following fields:
     #  - `name` the nickname for this contact.
     #  - `phoneNumber` the phone number for this contact.
     #  - `subscribed` true if the user is subscribed to this contact, false otherwise.
+    #  - `isDefaultSender` true if this user is the default sender, and can't be deleted.
     window.Contact = Backbone.Model.extend({
         defaults: () ->
             name: ''
@@ -32,6 +68,26 @@
     window.Contacts = Backbone.Collection.extend
         model: Contact,
         url: '/api/admin/contacts'
+
+
+    #### A log entry
+    # Has the following fields:
+    #  - `time` milliseconds since the epoch, UTC.
+    #  - `direction` "to" the owner, or "from" the owner.
+    #  - `contact` the name of the contact, or the number the message was sent
+    #    from/to.
+    #  - `message` the log message.
+    window.LogEntry = Backbone.Model.extend({
+    })
+
+    #### A list of LogEntry objects
+    window.LogEntries = Backbone.Collection.extend
+        model: LogEntry,
+        url: '/api/admin/log'
+
+        parse: (response) ->
+            @serverTime = new Date(response.now)
+            return response.logItems
 
     window.LoginView = Backbone.View.extend
         events:
@@ -60,14 +116,14 @@
                 url: '/api/login'
                 data: 'password=' + @$('.password').val()
                 success: () ->
-                    window.app.navigate 'contacts', true
+                    window.app.navigate defaultView, true
 
                 error: (xhr, textStatus, errorThrown) ->
                     apiErrorHandler self.$('.errorText'), xhr
 
     window.ContactView = Backbone.View.extend
         tagName: 'li'
-        className: 'listItem'
+        className: 'listItem selectable'
 
         initialize: () ->
             _.bindAll this, "render"
@@ -205,14 +261,48 @@
 
             return false
 
+
+    #### List of log entries
+    window.LogView = Backbone.View.extend
+        #events:
+            # TODO: Add refresh button
+            #'click .refreshButton': 'refresh'
+
+        initialize: () ->
+            _.bindAll this, "render"
+            @template = _.template($('#log-list-template').html())
+            @logEntryTemplate = _.template($('#log-entry-template').html())
+            @collection.on 'all', @render
+
+        render: () ->
+            self = this
+            $(@el).html @template()
+
+            @renderLogEntries()
+
+            return this
+
+        renderLogEntries: () ->
+            self = this
+            $logEntries = @$('.logEntries')
+            $logEntries.empty()
+
+            now = @collection.now
+            @collection.each (log) ->
+                jsonLogEntry = log.toJSON()
+                jsonLogEntry.timeStr = formatTime jsonLogEntry.time, now
+                $logEntries.append self.logEntryTemplate jsonLogEntry
+
+            return this
     
     window.contacts = new window.Contacts()
+    window.logEntries = new window.LogEntries()
 
     #### Router
     window.XmppVoiceMail = Backbone.Router.extend
         routes:
-            '': 'login'
-            'contacts': 'contactEditor'
+            ''     : 'login'
+            'main' : 'main'
 
         initialize: () ->
             @loginView = new LoginView()
@@ -221,14 +311,18 @@
             @contactEditorView = new ContactEditorView
                 collection: window.contacts
 
+            @logView = new LogView
+                collection: window.logEntries
+
         login: () ->
             @$main.empty()
             @$main.append @loginView.render().el
 
-
-        contactEditor: () ->
+        main: () ->
             window.contacts.fetch()
+            window.logEntries.fetch()
             @$main.empty()
             @$main.append @contactEditorView.render().el
+            @$main.append @logView.render().el
 
 )(jQuery)

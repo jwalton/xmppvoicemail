@@ -1,5 +1,6 @@
 (function($) {
-  var apiErrorHandler, showMessage;
+  var DAY, HOUR, MINUTE, SECOND, apiErrorHandler, defaultView, formatTime, showMessage;
+  defaultView = "main";
   showMessage = function($messageEl, message) {
     return $messageEl.html(message);
   };
@@ -17,6 +18,39 @@
     }
     return showMessage($errorEl, errorMessage);
   };
+  SECOND = 1000;
+  MINUTE = SECOND * 60;
+  HOUR = MINUTE * 60;
+  DAY = HOUR * 24;
+  formatTime = function(time, now) {
+    var answer, delta;
+    if (typeof time === "number") {
+      time = new Date(time);
+    }
+    if (now) {
+      if (typeof now === "number") {
+        now = new Date(now);
+      }
+    } else {
+      now = new Date;
+    }
+    answer = "";
+    delta = now.getTime() - time.getTime();
+    if (delta < 0) {
+      answer = "now";
+    } else if (delta < MINUTE) {
+      answer = "" + (delta / SECOND).toFixed(0) + "s ago";
+    } else if (delta < HOUR) {
+      answer = "" + (delta / MINUTE).toFixed(0) + "m ago";
+    } else if (delta < DAY) {
+      answer = "" + (time.getHours()) + ":" + (time.getMinutes());
+    } else if (delta < (DAY * 31)) {
+      answer = "This month";
+    } else {
+      answer = "Long ago";
+    }
+    return answer;
+  };
   window.Contact = Backbone.Model.extend({
     defaults: function() {
       return {
@@ -30,6 +64,15 @@
   window.Contacts = Backbone.Collection.extend({
     model: Contact,
     url: '/api/admin/contacts'
+  });
+  window.LogEntry = Backbone.Model.extend({});
+  window.LogEntries = Backbone.Collection.extend({
+    model: LogEntry,
+    url: '/api/admin/log',
+    parse: function(response) {
+      this.serverTime = new Date(response.now);
+      return response.logItems;
+    }
   });
   window.LoginView = Backbone.View.extend({
     events: {
@@ -60,7 +103,7 @@
         url: '/api/login',
         data: 'password=' + this.$('.password').val(),
         success: function() {
-          return window.app.navigate('contacts', true);
+          return window.app.navigate(defaultView, true);
         },
         error: function(xhr, textStatus, errorThrown) {
           return apiErrorHandler(self.$('.errorText'), xhr);
@@ -70,7 +113,7 @@
   });
   window.ContactView = Backbone.View.extend({
     tagName: 'li',
-    className: 'listItem',
+    className: 'listItem selectable',
     initialize: function() {
       _.bindAll(this, "render");
       this.template = _.template($('#contact-template').html());
@@ -215,27 +258,62 @@
       return false;
     }
   });
+  window.LogView = Backbone.View.extend({
+    initialize: function() {
+      _.bindAll(this, "render");
+      this.template = _.template($('#log-list-template').html());
+      this.logEntryTemplate = _.template($('#log-entry-template').html());
+      return this.collection.on('all', this.render);
+    },
+    render: function() {
+      var self;
+      self = this;
+      $(this.el).html(this.template());
+      this.renderLogEntries();
+      return this;
+    },
+    renderLogEntries: function() {
+      var $logEntries, now, self;
+      self = this;
+      $logEntries = this.$('.logEntries');
+      $logEntries.empty();
+      now = this.collection.now;
+      this.collection.each(function(log) {
+        var jsonLogEntry;
+        jsonLogEntry = log.toJSON();
+        jsonLogEntry.timeStr = formatTime(jsonLogEntry.time, now);
+        return $logEntries.append(self.logEntryTemplate(jsonLogEntry));
+      });
+      return this;
+    }
+  });
   window.contacts = new window.Contacts();
+  window.logEntries = new window.LogEntries();
   return window.XmppVoiceMail = Backbone.Router.extend({
     routes: {
       '': 'login',
-      'contacts': 'contactEditor'
+      'main': 'main'
     },
     initialize: function() {
       this.loginView = new LoginView();
       this.$main = $('#main');
-      return this.contactEditorView = new ContactEditorView({
+      this.contactEditorView = new ContactEditorView({
         collection: window.contacts
+      });
+      return this.logView = new LogView({
+        collection: window.logEntries
       });
     },
     login: function() {
       this.$main.empty();
       return this.$main.append(this.loginView.render().el);
     },
-    contactEditor: function() {
+    main: function() {
       window.contacts.fetch();
+      window.logEntries.fetch();
       this.$main.empty();
-      return this.$main.append(this.contactEditorView.render().el);
+      this.$main.append(this.contactEditorView.render().el);
+      return this.$main.append(this.logView.render().el);
     }
   });
 })(jQuery);
