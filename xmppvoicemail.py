@@ -158,11 +158,11 @@ class XmppVoiceMail:
             
         self.sendMessageToOwner("Call from: " + displayFrom + " status:" + callStatus, contact, fromNumber)
 
-    def getDisplayNameAndContact(self, fromNumber):
-        displayName = toPrettyNumber(fromNumber)
+    def getDisplayNameAndContact(self, number):
+        displayName = toPrettyNumber(number)
         
         # Find the XMPP user to send this from
-        contact = Contact.getByPhoneNumber(fromNumber)
+        contact = Contact.getByPhoneNumber(number)
         if contact:
             displayName = contact.name
         else:
@@ -370,6 +370,17 @@ class XmppVoiceMail:
             to=self._owner.emailAddress,
             subject=subject,
             body=body)
+
+    def sendSMS(self, contact, toNumber, body):
+        """ Send an SMS message,
+        
+        'contact' is only used for display purposes in the log, and may be passed as None.
+        """
+        displayName = contact
+        if not contact:
+            displayName = toNumber
+        self._log(LogItem.FROM_OWNER, displayName, body)
+        self._communications.sendSMS(toNumber, body)
 
     
 

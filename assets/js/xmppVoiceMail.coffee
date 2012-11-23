@@ -295,6 +295,39 @@
 
             return this
     
+    #### List of log entries
+    window.SmsWidgetView = Backbone.View.extend
+        events:
+            'click .sendMessageButton': 'sendSms'
+
+        initialize: () ->
+            _.bindAll this, "render"
+            @template = _.template($('#sms-widget').html())
+
+        render: () ->
+            self = this
+            $(@el).html @template()
+            return this
+
+        sendSms: (event) ->
+            event.preventDefault()
+            self = this
+            data =
+                to: @$('.numberInput').val()
+                message:  @$('.messageInput').val()
+            $.ajax
+                type: 'POST'
+                url: '/api/sendSms'
+                data: JSON.stringify(data)
+                success: () ->
+                    # Refresh the log entries:
+                    window.logEntries.fetch()
+                    self.$(':text').val("")
+
+                error: (xhr, textStatus, errorThrown) ->
+                    apiErrorHandler self.$('.errorText'), xhr
+            return false
+
     window.contacts = new window.Contacts()
     window.logEntries = new window.LogEntries()
 
@@ -314,6 +347,8 @@
             @logView = new LogView
                 collection: window.logEntries
 
+            @smsWidgetView = new SmsWidgetView()
+
         login: () ->
             @$main.empty()
             @$main.append @loginView.render().el
@@ -324,5 +359,6 @@
             @$main.empty()
             @$main.append @contactEditorView.render().el
             @$main.append @logView.render().el
+            @$main.append @smsWidgetView.render().el
 
 )(jQuery)

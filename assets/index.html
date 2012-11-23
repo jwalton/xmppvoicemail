@@ -110,6 +110,10 @@
                 width: 160px;
             }
 
+            .messageInput {
+                width: 400px;
+            }
+
             .subscribed {
                 display: inline-block;
                 width: 30px;
@@ -217,11 +221,11 @@
       
         <script type="text/template" id="sms-widget">
             <form class="smsWidgetForm">
-                <input class="nameInput" type="text" placeholder="Name"></input>
-                <input class="numberInput" type="text" placeholder="(xxx) xxx-xxxx"></input>
+                <input class="numberInput" type="text" placeholder="Contact or Number"></input>
                 <input class="messageInput" type="text" placeholder="Message"></input>
-                <input class="addButton" type="button" value="+"></input>
+                <input class="sendMessageButton" type="button" value="Send"></input>
             </form>
+            <div class="errorText"></div>
         </script>
       </head>
     <body>

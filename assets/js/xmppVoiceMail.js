@@ -39,9 +39,9 @@
     if (delta < 0) {
       answer = "now";
     } else if (delta < MINUTE) {
-      answer = "" + (delta / SECOND).toFixed(0) + "s ago";
+      answer = "" + ((delta / SECOND).toFixed(0)) + "s ago";
     } else if (delta < HOUR) {
-      answer = "" + (delta / MINUTE).toFixed(0) + "m ago";
+      answer = "" + ((delta / MINUTE).toFixed(0)) + "m ago";
     } else if (delta < DAY) {
       answer = "" + (time.getHours()) + ":" + (time.getMinutes());
     } else if (delta < (DAY * 31)) {
@@ -287,6 +287,43 @@
       return this;
     }
   });
+  window.SmsWidgetView = Backbone.View.extend({
+    events: {
+      'click .sendMessageButton': 'sendSms'
+    },
+    initialize: function() {
+      _.bindAll(this, "render");
+      return this.template = _.template($('#sms-widget').html());
+    },
+    render: function() {
+      var self;
+      self = this;
+      $(this.el).html(this.template());
+      return this;
+    },
+    sendSms: function(event) {
+      var data, self;
+      event.preventDefault();
+      self = this;
+      data = {
+        to: this.$('.numberInput').val(),
+        message: this.$('.messageInput').val()
+      };
+      $.ajax({
+        type: 'POST',
+        url: '/api/sendSms',
+        data: JSON.stringify(data),
+        success: function() {
+          window.logEntries.fetch();
+          return self.$(':text').val("");
+        },
+        error: function(xhr, textStatus, errorThrown) {
+          return apiErrorHandler(self.$('.errorText'), xhr);
+        }
+      });
+      return false;
+    }
+  });
   window.contacts = new window.Contacts();
   window.logEntries = new window.LogEntries();
   return window.XmppVoiceMail = Backbone.Router.extend({
@@ -300,9 +337,10 @@
       this.contactEditorView = new ContactEditorView({
         collection: window.contacts
       });
-      return this.logView = new LogView({
+      this.logView = new LogView({
         collection: window.logEntries
       });
+      return this.smsWidgetView = new SmsWidgetView();
     },
     login: function() {
       this.$main.empty();
@@ -313,7 +351,8 @@
       window.logEntries.fetch();
       this.$main.empty();
       this.$main.append(this.contactEditorView.render().el);
-      return this.$main.append(this.logView.render().el);
+      this.$main.append(this.logView.render().el);
+      return this.$main.append(this.smsWidgetView.render().el);
     }
   });
 })(jQuery);

@@ -279,6 +279,7 @@ class AdminLogHandler(AuthenticatedApiHandler):
 
 
 class InviteHandler(AuthenticatedApiHandler):
+    """ Sends invites for all selected users. """
     def post(self):
         appId = app_identity.get_application_id()
 
@@ -293,6 +294,29 @@ class InviteHandler(AuthenticatedApiHandler):
         self.response.headers['Content-Type'] = 'application/json'
         self.response.out.write(json.dumps(invited))
 
+
+class SendSmsHandler(AuthenticatedApiHandler):
+    """ Sends an SMS from our xmppVoiceMail. """
+    def post(self):
+        data = json.loads(self.request.body)
+        
+        if not data['message']:
+            raise errors.ValidationError("Please enter a message.")
+            
+        toNumber = None
+        contact = Contact.getByName(data['to'])
+        if contact:
+            toNumber = contact.normalizedPhoneNumber
+        else:
+            if not phonenumberutils.validateNumber(data['to']):
+                raise errors.ValidationError("Invalid phone number.")
+            else:
+                toNumber = phonenumberutils.toNormalizedNumber(data['to'])
+        
+        xmppVoiceMail.sendSMS(contact, toNumber, data['message'])
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.out.write(json.dumps({'message': 'sent'}))
 
 def handle_404(request, response, exception):
     logging.exception(exception)
@@ -315,6 +339,7 @@ def main():
         (r'/api/admin/contacts/(.*)', AdminContactsHandler),
         (r'/api/admin/log', AdminLogHandler),
         (r'/api/invite', InviteHandler),
+        (r'/api/sendSms', SendSmsHandler),
         
         (r'/_ah/xmpp/message/chat/', XMPPHandler),
         (r'/_ah/xmpp/presence/(available|unavailable)/', XmppPresenceHandler),
