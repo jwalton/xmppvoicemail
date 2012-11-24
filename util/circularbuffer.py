@@ -19,23 +19,25 @@ class ThreadSafeCircularBuffer:
     def addItem(self, item):
         """ Add an item to the circular buffer. """
         with self._lock:
-            self._head = (self._head + 1) % self._bufferSize
-            if len(self._buffer) <= self._head:
-                self._buffer.append(item)
-            else:
-                self._buffer[self._head] = item
+            if self._bufferSize > 0:
+                self._head = (self._head + 1) % self._bufferSize
+                if len(self._buffer) <= self._head:
+                    self._buffer.append(item)
+                else:
+                    self._buffer[self._head] = item
                 
     def getItems(self): 
         """ Return all the items in the buffer, in the same order they were added. """
         answer = []
         with self._lock:
-            if len(self._buffer) < self._bufferSize:
-                for index in range(0, len(self._buffer)):
-                    answer.append(self._buffer[index])
-            else:
-                for index in range(1, self._bufferSize + 1):
-                    item = self._buffer[index % self._bufferSize]
-                    answer.append(item)
+            if self._bufferSize > 0:
+                if len(self._buffer) < self._bufferSize:
+                    for index in range(0, len(self._buffer)):
+                        answer.append(self._buffer[index])
+                else:
+                    for index in range(1, self._bufferSize + 1):
+                        item = self._buffer[index % self._bufferSize]
+                        answer.append(item)
                     
         return answer
     

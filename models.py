@@ -3,6 +3,8 @@ from google.appengine.api import memcache
 
 from util import phonenumberutils
 
+_memcache = memcache.Client()
+
 def _getObjectByIdString(clazz, idString):
     if isinstance(idString, int):
         # Already an int
@@ -27,6 +29,8 @@ class XmppUser(db.Model):
         return q.get()
 
 _DEFAULT_SENDER_MEMCACHE_KEY = 'Contact:DEFAULT_SENDER'
+_CONTACT_BY_NUMBER_MEMCACHE_KEY = 'Contact:Number:'
+_CONTACT_BY_NAME_MEMCACHE_KEY = 'Contact:Name:'
 
 class Contact(db.Model):
     """Stores information about a contact.
@@ -54,6 +58,14 @@ class Contact(db.Model):
     def isDefaultSender(self):
         return self.key().id_or_name() == "DEFAULT_SENDER"
     
+    def _addToMemcache(self):
+        _memcache.set(_CONTACT_BY_NUMBER_MEMCACHE_KEY + self.normalizedPhoneNumber, self)
+        _memcache.set(_CONTACT_BY_NAME_MEMCACHE_KEY + self.name.lower(), self)
+
+    def _removeFromMemcache(self):
+        _memcache.delete(_CONTACT_BY_NUMBER_MEMCACHE_KEY + self.normalizedPhoneNumber)
+        _memcache.delete(_CONTACT_BY_NAME_MEMCACHE_KEY + self.name.lower())
+    
     @staticmethod
     def getByIdString(idString):
         """
@@ -67,27 +79,63 @@ class Contact(db.Model):
     @staticmethod
     def getByPhoneNumber(phoneNumber):
         normalizedNumber = phonenumberutils.toNormalizedNumber(phoneNumber)
-        q = db.GqlQuery("SELECT * FROM Contact WHERE normalizedPhoneNumber = :1", normalizedNumber)
-        return q.get()
-    
+
+        # First try to get from memcache
+        answer = _memcache.get(_CONTACT_BY_NUMBER_MEMCACHE_KEY + normalizedNumber)
+
+        if not answer:
+            # Fall back to the DB
+            q = db.GqlQuery("SELECT * FROM Contact WHERE normalizedPhoneNumber = :1", normalizedNumber)
+            answer = q.get()
+            if answer:
+                answer._addToMemcache()
+                
+        return answer
+        
     @staticmethod
     def getByName(name):
-        q = db.GqlQuery("SELECT * FROM Contact WHERE name = :1", name.lower())
-        return q.get()
+        # First try to get from memcache
+        answer = _memcache.get(_CONTACT_BY_NAME_MEMCACHE_KEY + name.lower())
+        
+        if not answer:
+            # Fall back to the DB
+            q = db.GqlQuery("SELECT * FROM Contact WHERE name = :1", name.lower())
+            answer = q.get()
+            if answer:
+                answer._addToMemcache()
+                
+        return answer
     
     @staticmethod
     def update(contact):
+        """ Update or create a Contact in the datastore. """
         if contact.isDefaultSender():
-            memcache.set(_DEFAULT_SENDER_MEMCACHE_KEY, contact)
+            _memcache.set(key=_DEFAULT_SENDER_MEMCACHE_KEY, value=contact)
+            # Update the contact in the DB
+            contact.put()
                     
-        contact.put()
+        else:
+            # Fetch the old contact from the DB
+            oldContact = Contact.get(contact.key())
+            
+            # Update the contact in the DB
+            contact.normalizedPhoneNumber = phonenumberutils.toNormalizedNumber(contact.phoneNumber) 
+            contact.put()
+            
+            # Remove the old contact from memcache
+            if oldContact:
+                oldContact._removeFromMemcache()
+                
+            # Put the new contact into memcache
+            contact._addToMemcache()
+            
             
     
     @staticmethod
     def getDefaultSender():
         # TODO: Think about using some caching here, since we get this guy
         # all the time.
-        defaultSender = memcache.get(_DEFAULT_SENDER_MEMCACHE_KEY)
+        defaultSender = _memcache.get(_DEFAULT_SENDER_MEMCACHE_KEY)
         if defaultSender is not None:
             return defaultSender
         else:
@@ -95,6 +143,6 @@ class Contact(db.Model):
                 name="xmppVoiceMail".lower(),
                 phoneNumber="*",
                 normalizedPhoneNumber="*")
-            memcache.add(_DEFAULT_SENDER_MEMCACHE_KEY, defaultSender)
+            _memcache.add(key=_DEFAULT_SENDER_MEMCACHE_KEY, value=defaultSender)
             return defaultSender
         

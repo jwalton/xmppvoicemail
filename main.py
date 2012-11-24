@@ -247,8 +247,8 @@ class AdminContactsHandler(AuthenticatedApiHandler):
             name = user['name'].lower(),
             phoneNumber = phonenumberutils.toPrettyNumber(user['phoneNumber']),
             normalizedPhoneNumber = phonenumberutils.toNormalizedNumber(user['phoneNumber']))
-        
-        contact.save()
+
+        Contact.update(contact)
 
         xmppVoiceMail.sendXmppInvite(contact.name)
 
