@@ -109,14 +109,16 @@ class Contact(db.Model):
     @staticmethod
     def update(contact):
         """ Update or create a Contact in the datastore. """
-        if contact.isDefaultSender():
+        if contact.is_saved() and contact.isDefaultSender():
             _memcache.set(key=_DEFAULT_SENDER_MEMCACHE_KEY, value=contact)
             # Update the contact in the DB
             contact.put()
                     
         else:
             # Fetch the old contact from the DB
-            oldContact = Contact.get(contact.key())
+            oldContact = None
+            if contact.is_saved():
+                oldContact = Contact.get(contact.key())
             
             # Update the contact in the DB
             contact.normalizedPhoneNumber = phonenumberutils.toNormalizedNumber(contact.phoneNumber) 
