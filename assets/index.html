@@ -141,20 +141,24 @@
             }
 
 
-            .logTime {
-                display: inline-block;
-                width: 100px;
-            }
-
             .logDirection {
                 display: inline-block;
                 width: 30px;
-                text-align: center;                
+                text-align: center;
+            }
+
+            .logEntries .logDirection, .logEntries .logContact, .logEntries .logTime {
+                color: #888;
             }
 
             .logContact {
                 display: inline-block;
                 width: 160px;
+            }
+
+            .logTime {
+                display: inline-block;
+                width: 100px;
             }
 
             .logMessage {
@@ -216,7 +220,6 @@
                     <span class="logDirection">Dir</span>
                     <span class="logContact">Contact</span>
                     <span class="logTime">Time</span>
-                    <span class="logMessage">Message</span>
                 </li>
             </ul>
             <ul class="listContainer logEntries">
