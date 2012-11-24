@@ -3,6 +3,9 @@
     # View to display after logging in.
     defaultView = "main"
 
+    # Time to auto-refresh the log, in seconds.
+    LOG_REFRESH_TIME_IN_S = 10
+
     showMessage = ($messageEl, message) ->
         $messageEl.html message 
 
@@ -35,7 +38,7 @@
         answer = ""
 
         delta = now.getTime() - time.getTime()
-        if delta < 0
+        if delta < 2 * SECOND
             answer = "now"
         else if delta < MINUTE
             answer = "#{(delta / SECOND).toFixed 0}s ago"
@@ -70,57 +73,7 @@
         url: '/api/admin/contacts'
 
 
-    #### A log entry
-    # Has the following fields:
-    #  - `time` milliseconds since the epoch, UTC.
-    #  - `direction` "to" the owner, or "from" the owner.
-    #  - `contact` the name of the contact, or the number the message was sent
-    #    from/to.
-    #  - `message` the log message.
-    window.LogEntry = Backbone.Model.extend({
-    })
-
-    #### A list of LogEntry objects
-    window.LogEntries = Backbone.Collection.extend
-        model: LogEntry,
-        url: '/api/admin/log'
-
-        parse: (response) ->
-            @serverTime = new Date(response.now)
-            return response.logItems
-
-    window.LoginView = Backbone.View.extend
-        events:
-            'click .loginButton'    : 'login'
-            'keypress input'        : 'loginOnEnter'
-
-        initialize: () ->
-            _.bindAll this, "render"
-            @template = _.template($('#login-template').html())
-
-        render: () ->
-            renderedContent = @template
-            $(@el).html(renderedContent)
-            return this
-
-        loginOnEnter: (event) ->
-            if (event.keyCode == 13)
-                @login(event)
-
-        login: (event) ->
-            # TODO: Do we need to escape the password here or encode it or something?
-            event.preventDefault()
-            self = this
-            $.ajax
-                type: 'POST'
-                url: '/api/login'
-                data: 'password=' + @$('.password').val()
-                success: () ->
-                    window.app.navigate defaultView, true
-
-                error: (xhr, textStatus, errorThrown) ->
-                    apiErrorHandler self.$('.errorText'), xhr
-
+    #### Displays a contact.
     window.ContactView = Backbone.View.extend
         tagName: 'li'
         className: 'listItem selectable'
@@ -261,6 +214,56 @@
 
             return false
 
+    #### A log entry
+    # Has the following fields:
+    #  - `time` milliseconds since the epoch, UTC.
+    #  - `direction` "to" the owner, or "from" the owner.
+    #  - `contact` the name of the contact, or the number the message was sent
+    #    from/to.
+    #  - `message` the log message.
+    window.LogEntry = Backbone.Model.extend({
+    })
+
+    #### A list of LogEntry objects
+    window.LogEntries = Backbone.Collection.extend
+        model: LogEntry,
+        url: '/api/admin/log'
+
+        parse: (response) ->
+            @serverTime = new Date(response.now)
+            return response.logItems
+
+    window.LoginView = Backbone.View.extend
+        events:
+            'click .loginButton'    : 'login'
+            'keypress input'        : 'loginOnEnter'
+
+        initialize: () ->
+            _.bindAll this, "render"
+            @template = _.template($('#login-template').html())
+
+        render: () ->
+            renderedContent = @template
+            $(@el).html(renderedContent)
+            return this
+
+        loginOnEnter: (event) ->
+            if (event.keyCode == 13)
+                @login(event)
+
+        login: (event) ->
+            # TODO: Do we need to escape the password here or encode it or something?
+            event.preventDefault()
+            self = this
+            $.ajax
+                type: 'POST'
+                url: '/api/login'
+                data: 'password=' + @$('.password').val()
+                success: () ->
+                    window.app.navigate defaultView, true
+
+                error: (xhr, textStatus, errorThrown) ->
+                    apiErrorHandler self.$('.errorText'), xhr
 
     #### List of log entries
     window.LogView = Backbone.View.extend
@@ -361,6 +364,10 @@
         main: () ->
             window.contacts.fetch()
             window.logEntries.fetch()
+            if ! @timer
+                @timer = setInterval (() -> window.logEntries.fetch()),
+                    (LOG_REFRESH_TIME_IN_S * SECOND)
+
             @$main.empty()
             @$main.append @contactEditorView.render().el
             @$main.append @logView.render().el

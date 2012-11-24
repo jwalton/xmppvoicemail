@@ -1,6 +1,7 @@
 (function($) {
-  var DAY, HOUR, MINUTE, SECOND, apiErrorHandler, defaultView, formatTime, showMessage;
+  var DAY, HOUR, LOG_REFRESH_TIME_IN_S, MINUTE, SECOND, apiErrorHandler, defaultView, formatTime, showMessage;
   defaultView = "main";
+  LOG_REFRESH_TIME_IN_S = 10;
   showMessage = function($messageEl, message) {
     return $messageEl.html(message);
   };
@@ -36,7 +37,7 @@
     }
     answer = "";
     delta = now.getTime() - time.getTime();
-    if (delta < 0) {
+    if (delta < 2 * SECOND) {
       answer = "now";
     } else if (delta < MINUTE) {
       answer = "" + ((delta / SECOND).toFixed(0)) + "s ago";
@@ -64,52 +65,6 @@
   window.Contacts = Backbone.Collection.extend({
     model: Contact,
     url: '/api/admin/contacts'
-  });
-  window.LogEntry = Backbone.Model.extend({});
-  window.LogEntries = Backbone.Collection.extend({
-    model: LogEntry,
-    url: '/api/admin/log',
-    parse: function(response) {
-      this.serverTime = new Date(response.now);
-      return response.logItems;
-    }
-  });
-  window.LoginView = Backbone.View.extend({
-    events: {
-      'click .loginButton': 'login',
-      'keypress input': 'loginOnEnter'
-    },
-    initialize: function() {
-      _.bindAll(this, "render");
-      return this.template = _.template($('#login-template').html());
-    },
-    render: function() {
-      var renderedContent;
-      renderedContent = this.template;
-      $(this.el).html(renderedContent);
-      return this;
-    },
-    loginOnEnter: function(event) {
-      if (event.keyCode === 13) {
-        return this.login(event);
-      }
-    },
-    login: function(event) {
-      var self;
-      event.preventDefault();
-      self = this;
-      return $.ajax({
-        type: 'POST',
-        url: '/api/login',
-        data: 'password=' + this.$('.password').val(),
-        success: function() {
-          return window.app.navigate(defaultView, true);
-        },
-        error: function(xhr, textStatus, errorThrown) {
-          return apiErrorHandler(self.$('.errorText'), xhr);
-        }
-      });
-    }
   });
   window.ContactView = Backbone.View.extend({
     tagName: 'li',
@@ -258,6 +213,52 @@
       return false;
     }
   });
+  window.LogEntry = Backbone.Model.extend({});
+  window.LogEntries = Backbone.Collection.extend({
+    model: LogEntry,
+    url: '/api/admin/log',
+    parse: function(response) {
+      this.serverTime = new Date(response.now);
+      return response.logItems;
+    }
+  });
+  window.LoginView = Backbone.View.extend({
+    events: {
+      'click .loginButton': 'login',
+      'keypress input': 'loginOnEnter'
+    },
+    initialize: function() {
+      _.bindAll(this, "render");
+      return this.template = _.template($('#login-template').html());
+    },
+    render: function() {
+      var renderedContent;
+      renderedContent = this.template;
+      $(this.el).html(renderedContent);
+      return this;
+    },
+    loginOnEnter: function(event) {
+      if (event.keyCode === 13) {
+        return this.login(event);
+      }
+    },
+    login: function(event) {
+      var self;
+      event.preventDefault();
+      self = this;
+      return $.ajax({
+        type: 'POST',
+        url: '/api/login',
+        data: 'password=' + this.$('.password').val(),
+        success: function() {
+          return window.app.navigate(defaultView, true);
+        },
+        error: function(xhr, textStatus, errorThrown) {
+          return apiErrorHandler(self.$('.errorText'), xhr);
+        }
+      });
+    }
+  });
   window.LogView = Backbone.View.extend({
     initialize: function() {
       _.bindAll(this, "render");
@@ -355,6 +356,11 @@
     main: function() {
       window.contacts.fetch();
       window.logEntries.fetch();
+      if (!this.timer) {
+        this.timer = setInterval((function() {
+          return window.logEntries.fetch();
+        }), LOG_REFRESH_TIME_IN_S * SECOND);
+      }
       this.$main.empty();
       this.$main.append(this.contactEditorView.render().el);
       this.$main.append(this.logView.render().el);
