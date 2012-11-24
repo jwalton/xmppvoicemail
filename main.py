@@ -194,7 +194,7 @@ class AuthenticatedApiHandler(BaseApiHandler):
     def dispatch(self):
         self.session_store = sessions.get_store(request=self.request)
 
-        # TODO: Verify the user is validated        
+        # Verify the user is validated        
         if not "user" in self.session:
             raise HTTPUnauthorized()
 

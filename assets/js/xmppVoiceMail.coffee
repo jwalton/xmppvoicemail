@@ -346,6 +346,7 @@
             'main' : 'main'
 
         initialize: () ->
+            # Set up views
             @loginView = new LoginView()
             @$main = $('#main')
 
@@ -356,6 +357,12 @@
                 collection: window.logEntries
 
             @smsWidgetView = new SmsWidgetView()
+
+            # Set up JQuery to handle auth failures:
+            $.ajaxSetup
+                statusCode:
+                    401: () -> window.location.replace('/')
+                    403: () -> window.location.replace('/#denied')
 
         login: () ->
             @$main.empty()

@@ -347,7 +347,17 @@
       this.logView = new LogView({
         collection: window.logEntries
       });
-      return this.smsWidgetView = new SmsWidgetView();
+      this.smsWidgetView = new SmsWidgetView();
+      return $.ajaxSetup({
+        statusCode: {
+          401: function() {
+            return window.location.replace('/');
+          },
+          403: function() {
+            return window.location.replace('/#denied');
+          }
+        }
+      });
     },
     login: function() {
       this.$main.empty();
