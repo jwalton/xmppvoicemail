@@ -47,6 +47,12 @@ class Owner:
         self.jid = jid
         self.emailAddress = emailAddress
         self.logSize = logSize
+        
+    def xmppEnabled(self):
+        return self.jid and self.jid != "None"
+
+    def emailEnabled(self):
+        return self.emailAddress and self.emailAddress != "None"
 
 class Communications:
     def __init__(self):
@@ -217,9 +223,12 @@ class XmppVoiceMail:
         Raises InvalidParametersException if there are any problems with the format of the email.
         Raises PermissionException if the sender is not authorized to use this service.
         """
-        if not self._owner.emailAddress in sender:
-            raise PermissionException("Incorrect XMPP user")
+        if not self._owner.emailEnabled():
+            raise PermissionException("Email Disabled.")
 
+        if not self._owner.emailAddress in sender:
+            raise PermissionException("Incorrect user")
+        
         self._forwardToSms(to, messageBody)
 
     def _forwardToSms(self, to, messageBody):
@@ -233,8 +242,9 @@ class XmppVoiceMail:
     def sendXmppInvite(self, nickname):
         """Send an XMPP invite to the owner of this phone for the given nickname.
         """
-        fromJid = nickname + "@" + self._APP_ID + ".appspotchat.com"
-        self._communications.sendXmppInvite(fromJid, self._owner.jid)
+        if self._owner.xmppEnabled():
+            fromJid = nickname + "@" + self._APP_ID + ".appspotchat.com"
+            self._communications.sendXmppInvite(fromJid, self._owner.jid)
 
     _messageRegex = re.compile(r"^([^:]*):(.*)$")
 
@@ -280,13 +290,14 @@ class XmppVoiceMail:
 
     def _ownerXmppPresent(self):
         xmppOnline = False
-        if self._owner.jid.endswith("@gmail.com"):
-            # This always shows the user online in the dev environment, so fall back on the DB for dev.
-            xmppOnline = self._communications.getXmppPresence(self._owner.jid)
-        else:
-            user = XmppUser.getByJid(self._owner.jid)
-            if user:
-                xmppOnline = user.presence
+        if self._owner.xmppEnabled():
+            if self._owner.jid.endswith("@gmail.com"):
+                # This always shows the user online in the dev environment, so fall back on the DB for dev.
+                xmppOnline = self._communications.getXmppPresence(self._owner.jid)
+            else:
+                user = XmppUser.getByJid(self._owner.jid)
+                if user:
+                    xmppOnline = user.presence
                 
         return xmppOnline
     
@@ -309,8 +320,8 @@ class XmppVoiceMail:
 
         xmppOnline = self._ownerXmppPresent()
                 
-        sendByEmail = (not xmppOnline) or \
-                      ((not contact.subscribed) and (not defaultSender.subscribed)) 
+        sendByEmail = self._owner.emailEnabled() and ( (not xmppOnline) or \
+                      ((not contact.subscribed) and (not defaultSender.subscribed)) ) 
                 
         if sendByEmail:
             self.sendEmailMessageToOwner(
@@ -319,7 +330,7 @@ class XmppVoiceMail:
                 fromNumber=fromNumber)
             answer = True
              
-        else:
+        elif self._owner.xmppEnabled():
             if not contact.subscribed:
                 # Need a subscribed contact for XMPP; use the default sender.
                 contact = defaultSender

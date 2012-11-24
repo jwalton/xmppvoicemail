@@ -115,7 +115,7 @@ class XmppPresenceHandler(webapp2.RequestHandler):
         userJid = self.request.get('from').split('/')[0]
         userAvailable = (available == 'available')
 
-        if userJid != config.USERJID:
+        if userJid != owner.jid:
             logging.warn("Got XMPP presence for unknown user " + userJid)
         else:
             if userAvailable:
@@ -285,11 +285,12 @@ class InviteHandler(AuthenticatedApiHandler):
 
         idsToInvite = json.loads(self.request.body)
         invited = []
-        for contactId in idsToInvite:
-            contact = Contact.getByIdString(contactId)
-            fromJid = contact.name + "@" + appId + ".appspotchat.com"
-            xmpp.send_invite(config.USERJID, fromJid)
-            invited.append(fromJid)
+
+        if owner.xmppEnabled():        
+            for contactId in idsToInvite:
+                contact = Contact.getByIdString(contactId)
+                xmppVoiceMail.sendXmppInvite(contact.name)
+                invited.append(contact.name)
 
         self.response.headers['Content-Type'] = 'application/json'
         self.response.out.write(json.dumps(invited))
@@ -357,12 +358,10 @@ def main():
     app.error_handlers[404] = handle_404
     app.error_handlers[500] = handle_500
 
-    # Send an invite for the default sender if one hasn't been sent.
+    # Send an invite for the default sender if the default sender is not subscribed.
     defaultSender = Contact.getDefaultSender()
     if not defaultSender.subscribed:
-        appId = app_identity.get_application_id()
-        fromJid = defaultSender.name + "@" + appId + ".appspotchat.com"
-        xmpp.send_invite(config.USERJID, fromJid)
+        xmppVoiceMail.sendXmppInvite(defaultSender.name)
        
     return app
 

@@ -2,10 +2,17 @@
 ADMIN_PASSWORD = "secret"
 
 # The XMPP account to send notifications to.
-# Change this to the JID of your Xmpp account (example: dthompson@gmail.com).
+# Change this to the JID of your Xmpp account (example: dthompson@gmail.com)
+#
+# Set to None if you don't want to receive notifications via XMPP; you'll
+# get them by email instead. 
 USERJID = "you@domain.com"
 
 # The email address to send notifications to if you are offline.
+#
+# Set to None if you don't want to receive emails.  The last few messages will
+# be logged in the admin UI, but if you don't check the admin UI often you
+# might lose messages.
 USER_EMAIL = "you@domain.com"
 
 # This is the number of SMS messages to keep a log of (in-memory only -
