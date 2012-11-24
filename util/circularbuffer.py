@@ -31,11 +31,11 @@ class ThreadSafeCircularBuffer:
         answer = []
         with self._lock:
             if self._bufferSize > 0:
-                if len(self._buffer) < self._bufferSize:
+                if len(self._buffer) < (self._bufferSize - 1):
                     for index in range(0, len(self._buffer)):
                         answer.append(self._buffer[index])
                 else:
-                    for index in range(1, self._bufferSize + 1):
+                    for index in range(self._head + 1, self._bufferSize + self._head + 1):
                         item = self._buffer[index % self._bufferSize]
                         answer.append(item)
                     

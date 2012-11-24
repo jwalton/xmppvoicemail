@@ -299,6 +299,7 @@
     window.SmsWidgetView = Backbone.View.extend
         events:
             'click .sendMessageButton': 'sendSms'
+            'keypress input'          : 'sendSmsOnEnter'
 
         initialize: () ->
             _.bindAll this, "render"
@@ -308,6 +309,10 @@
             self = this
             $(@el).html @template()
             return this
+
+        sendSmsOnEnter: (event) ->
+            if (event.keyCode == 13)
+                @sendSms(event)
 
         sendSms: (event) ->
             event.preventDefault()

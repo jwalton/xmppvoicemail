@@ -10,7 +10,7 @@ USER_EMAIL = "you@domain.com"
 
 # This is the number of SMS messages to keep a log of (in-memory only -
 # cleared if your App restarts.)  Set to 0 to disable. 
-LOG_SIZE = 20
+LOG_SIZE = 10
 
 #Twilio Account SID
 TWILIO_ACID = "XXX"

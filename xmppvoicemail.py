@@ -378,7 +378,8 @@ class XmppVoiceMail:
         """
         displayName = contact
         if not contact:
-            displayName = toNumber
+            displayName, contact = self.getDisplayNameAndContact(toNumber)
+            
         self._log(LogItem.FROM_OWNER, displayName, body)
         self._communications.sendSMS(toNumber, body)
 

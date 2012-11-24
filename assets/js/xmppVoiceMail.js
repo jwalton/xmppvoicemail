@@ -289,7 +289,8 @@
   });
   window.SmsWidgetView = Backbone.View.extend({
     events: {
-      'click .sendMessageButton': 'sendSms'
+      'click .sendMessageButton': 'sendSms',
+      'keypress input': 'sendSmsOnEnter'
     },
     initialize: function() {
       _.bindAll(this, "render");
@@ -300,6 +301,11 @@
       self = this;
       $(this.el).html(this.template());
       return this;
+    },
+    sendSmsOnEnter: function(event) {
+      if (event.keyCode === 13) {
+        return this.sendSms(event);
+      }
     },
     sendSms: function(event) {
       var data, self;
