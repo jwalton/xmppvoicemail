@@ -1,8 +1,17 @@
 (function($) {
-  var DAY, HOUR, LOG_REFRESH_TIME_IN_S, MINUTE, SECOND, apiErrorHandler, defaultView, formatTime, showMessage;
+  var DAY, HOUR, LOG_REFRESH_TIME_IN_S, MINUTE, SECOND, apiErrorHandler, defaultView, formatTime, showErrorMessage, showMessage;
   defaultView = "main";
   LOG_REFRESH_TIME_IN_S = 10;
   showMessage = function($messageEl, message) {
+    $messageEl.removeClass("error");
+    return $messageEl.html(message);
+  };
+  showErrorMessage = function($messageEl, message) {
+    if (message) {
+      $messageEl.addClass("error");
+    } else {
+      $messageEl.removeClass("error");
+    }
     return $messageEl.html(message);
   };
   apiErrorHandler = function($errorEl, xhr) {
@@ -17,7 +26,7 @@
         errorMessage = "Error: " + xhr.status;
       }
     }
-    return showMessage($errorEl, errorMessage);
+    return showErrorMessage($errorEl, errorMessage);
   };
   SECOND = 1000;
   MINUTE = SECOND * 60;
@@ -161,19 +170,18 @@
       }
     },
     addNewContact: function(event) {
-      var newContact, onError;
+      var newContact, onError, self;
       event.preventDefault();
       this.$('.addButton').attr("disabled", true);
-      this.$('.errorText').html("");
+      showMessage(this.$('.errorText'), "");
+      self = this;
+      onError = function(model, xhr, options) {
+        apiErrorHandler(self.$('.errorText'), xhr);
+        return this.$('.addButton').attr("disabled", false);
+      };
       newContact = {
         name: this.$(".nameInput").val(),
         phoneNumber: this.$(".numberInput").val()
-      };
-      onError = function(model, xhr, options) {
-        var errorResult;
-        errorResult = $.parseJSON(xhr.responseText);
-        this.$('.errorText').html(errorResult.error);
-        return this.$('.addButton').attr("disabled", false);
       };
       this.collection.create(newContact, {
         wait: true,
@@ -261,10 +269,18 @@
   });
   window.LogView = Backbone.View.extend({
     initialize: function() {
-      _.bindAll(this, "render");
+      _.bindAll(this, "render", "onCollectionEvent");
       this.template = _.template($('#log-list-template').html());
       this.logEntryTemplate = _.template($('#log-entry-template').html());
-      return this.collection.on('all', this.render);
+      return this.collection.on('all', this.onCollectionEvent);
+    },
+    onCollectionEvent: function(eventName) {
+      if (eventName === "error") {
+        return showErrorMessage(this.$('.errorText'), "Connection lost");
+      } else {
+        showMessage(this.$('.errorText'), "");
+        return this.render();
+      }
     },
     render: function() {
       var self;

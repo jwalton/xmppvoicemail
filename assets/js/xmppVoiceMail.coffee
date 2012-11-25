@@ -7,6 +7,15 @@
     LOG_REFRESH_TIME_IN_S = 10
 
     showMessage = ($messageEl, message) ->
+        $messageEl.removeClass "error"
+        $messageEl.html message 
+
+    showErrorMessage = ($messageEl, message) ->
+        if message
+            $messageEl.addClass "error"
+        else
+            $messageEl.removeClass "error"
+
         $messageEl.html message 
 
     apiErrorHandler = ($errorEl, xhr) ->
@@ -19,7 +28,7 @@
             if !errorMessage
                 errorMessage = "Error: " + xhr.status
 
-        showMessage $errorEl, errorMessage
+        showErrorMessage $errorEl, errorMessage
 
     SECOND = 1000
     MINUTE = SECOND * 60
@@ -172,18 +181,16 @@
             event.preventDefault()
 
             @$('.addButton').attr("disabled", true)
+            showMessage @$('.errorText'), ""
 
-            @$('.errorText').html ""
+            self = this
+            onError = (model, xhr, options) ->
+                apiErrorHandler self.$('.errorText'), xhr
+                @$('.addButton').attr("disabled", false)
 
             newContact = 
                 name: @$(".nameInput").val()
                 phoneNumber: @$(".numberInput").val()
-
-            onError = (model, xhr, options) ->
-                errorResult = $.parseJSON xhr.responseText
-                @$('.errorText').html errorResult.error
-                @$('.addButton').attr("disabled", false)
-
 
             @collection.create newContact, {wait: true, error: onError}
 
@@ -272,10 +279,17 @@
             #'click .refreshButton': 'refresh'
 
         initialize: () ->
-            _.bindAll this, "render"
+            _.bindAll this, "render", "onCollectionEvent"
             @template = _.template($('#log-list-template').html())
             @logEntryTemplate = _.template($('#log-entry-template').html())
-            @collection.on 'all', @render
+            @collection.on 'all', @onCollectionEvent
+
+        onCollectionEvent: (eventName) ->
+            if eventName is "error"
+                showErrorMessage @$('.errorText'), "Connection lost"
+            else
+                showMessage @$('.errorText'), ""
+                @render()
 
         render: () ->
             self = this
