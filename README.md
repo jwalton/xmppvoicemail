@@ -1,9 +1,7 @@
 XMPP Voicemail
 ==============
 
-This project was originally authored by Mick Thompson (dthompson@gmail.com),
-although this version has been rather heavily modified by Jason Walton
-(dev@lucid.thedreaming.org).
+By Mick Thompson (dthompson@gmail.com) and Jason Walton (dev@lucid.thedreaming.org).
 
 This project will allow you to receive voice mail and send and receive SMS
 messages via an XMPP service, such as Google Chat.

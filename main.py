@@ -1,6 +1,5 @@
 #
-# Original Author: Mick Thompson (dthompson@gmail.com)
-# Heavily hacked up by: Jason Walton (dev@lucid.thedreaming.org)
+# By Mick Thompson (dthompson@gmail.com) and Jason Walton (dev@lucid.thedreaming.org)
 #
 import logging
 import os
