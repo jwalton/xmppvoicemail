@@ -71,15 +71,15 @@ class Communications:
     def sendXmppInvite(self, fromJid, toJid):
         xmpp.send_invite(toJid, fromJid)
         
-    def getXmppPresence(self, jid):
-        return xmpp.get_presence(jid)
+    def getXmppPresence(self, jid, fromJid):
+        return xmpp.get_presence(jid, fromJid)
 
-    def sendSMS(self, toNumber, body):
+    def sendSMS(self, fromNumber, toNumber, body):
         logging.info("SMS to " + toNumber + ": " + body)
 
         if not self._DEV_ENVIRONMENT:
             form_fields = {
-                "From": self._owner.phoneNumber,
+                "From": fromNumber,
                 "To": toNumber,
                 "Body": body
             }
@@ -232,11 +232,17 @@ class XmppVoiceMail:
         self._forwardToSms(to, messageBody)
 
     def _forwardToSms(self, to, messageBody):
-        toNumber, body = self._getNumberAndBody(to, messageBody)
+        toName = to.split("@")[0]
 
-        self._log(LogItem.FROM_OWNER, to, body)
+        contact = Contact.getByName(toName)
+        if not contact:
+            raise InvalidParametersException("Unknown contact " + toName)
+    
+        toNumber, body = self._getNumberAndBody(contact, messageBody)
 
-        self._communications.sendSMS(toNumber, body)
+        self._log(LogItem.FROM_OWNER, contact, body)
+
+        self._communications.sendSMS(self._owner.phoneNumber, toNumber, body)
 
 
     def sendXmppInvite(self, nickname):
@@ -248,8 +254,8 @@ class XmppVoiceMail:
 
     _messageRegex = re.compile(r"^([^:]*):(.*)$")
 
-    def _getNumberAndBody(self, toAddress, body):
-        """Get the destination phone number and the message body from a message.
+    def _getNumberAndBody(self, contact, body):
+        """Get the destination contact and the message body from a message.
         
         The message will be either to the default sender, in which case
         the body will be of the format "number:message", or else the message
@@ -262,13 +268,6 @@ class XmppVoiceMail:
         Raises InvalidParametersException if there are any errors in the input.
         """
         
-        toName = toAddress.split("@")[0]
-        toNumber = None
-
-        contact = Contact.getByName(toName)
-        if not contact:
-            raise InvalidParametersException("Unknown contact " + toName)
-    
         if not contact.isDefaultSender():
             toNumber = contact.normalizedPhoneNumber
             
@@ -288,12 +287,12 @@ class XmppVoiceMail:
         return (toNumber, body)
 
 
-    def _ownerXmppPresent(self):
+    def _ownerXmppPresent(self, fromJid):
         xmppOnline = False
         if self._owner.xmppEnabled():
             if self._owner.jid.endswith("@gmail.com"):
                 # This always shows the user online in the dev environment, so fall back on the DB for dev.
-                xmppOnline = self._communications.getXmppPresence(self._owner.jid)
+                xmppOnline = self._communications.getXmppPresence(self._owner.jid, fromJid)
             else:
                 user = XmppUser.getByJid(self._owner.jid)
                 if user:
@@ -318,7 +317,8 @@ class XmppVoiceMail:
         if not contact:
             contact = defaultSender
 
-        xmppOnline = self._ownerXmppPresent()
+        fromJid = contact.name  + "@" + self._APP_ID + ".appspotchat.com"
+        xmppOnline = self._ownerXmppPresent(fromJid)
                 
         sendByEmail = self._owner.emailEnabled() and ( (not xmppOnline) or \
                       ((not contact.subscribed) and (not defaultSender.subscribed)) ) 
@@ -392,7 +392,7 @@ class XmppVoiceMail:
             displayName, contact = self.getDisplayNameAndContact(toNumber)
             
         self._log(LogItem.FROM_OWNER, displayName, body)
-        self._communications.sendSMS(toNumber, body)
+        self._communications.sendSMS(self._owner.phoneNumber, toNumber, body)
 
     
 

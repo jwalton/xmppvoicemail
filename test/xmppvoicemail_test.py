@@ -39,10 +39,10 @@ class CommunicationsFixture:
             "toJid": toJid
         })
         
-    def getXmppPresence(self, jid):
+    def getXmppPresence(self, jid, fromJid):
         return self.ownerOnline
 
-    def sendSMS(self, toNumber, body):
+    def sendSMS(self, fromNumber, toNumber, body):
         self.sms.append({
             "toNumber": toNumber,
             "body": body
@@ -82,11 +82,12 @@ class XmppVoiceMailTestCases(unittest.TestCase):
         
     def createContact(self, subscribed):
         # Create a known contact
-        Contact(
+        c = Contact(
             name = "mrtest",
             phoneNumber = self.contactNumber,
             normalizedPhoneNumber=phonenumberutils.toNormalizedNumber(self.contactNumber),
-            subscribed=subscribed).save()        
+            subscribed=subscribed)
+        Contact.update(c)        
         
     def test_incomingSmsMessageFromUnknownUser(self):
         """
@@ -210,6 +211,7 @@ class XmppVoiceMailTestCases(unittest.TestCase):
         """
         Test an incoming XMPP to a contact.
         """
+        self.createContact(subscribed=False)
         self.createContact(subscribed=True)
 
         self.xmppvoicemail.handleIncomingXmpp(
