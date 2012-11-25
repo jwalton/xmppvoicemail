@@ -186,7 +186,7 @@ class LoginHandler(BaseApiHandler):
             # User hasn't changed their admin password yet.  :(
             raise errors.ValidationError("You must change your password in config.py and re-deploy the app.")
         elif password == config.ADMIN_PASSWORD:
-            self.session['user'] = True
+            self.session['xmppVoiceMailUser'] = True
         else:
             raise errors.BadPasswordError("Incorrect password.")
 
@@ -195,7 +195,7 @@ class AuthenticatedApiHandler(BaseApiHandler):
         self.session_store = sessions.get_store(request=self.request)
 
         # Verify the user is validated        
-        if not "user" in self.session:
+        if not "xmppVoiceMailUser" in self.session:
             raise HTTPUnauthorized()
 
         try:        
