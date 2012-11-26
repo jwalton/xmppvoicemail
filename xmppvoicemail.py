@@ -180,7 +180,7 @@ class XmppVoiceMail:
     def handleVoiceMail(self, fromNumber, transcriptionText=None, recordingUrl=None):
         """Handle an incoming voice mail.
         """
-        displayName, contact = self.getContactAndDisplayName(fromNumber)
+        displayName, contact = self.getDisplayNameAndContact(fromNumber)
 
         body = "New message from " + displayName
         if transcriptionText:

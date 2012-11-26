@@ -28,7 +28,7 @@ xmppVoiceMail = XmppVoiceMail(owner)
 class CallHandler(webapp2.RequestHandler):
     # Handles an incoming voice call from Twilio.
     def post(self):
-        fromNumber = self.request.get("from")
+        fromNumber = self.request.get("From")
         callStatus = self.request.get("CallStatus")
 
         xmppVoiceMail.handleIncomingCall(fromNumber, callStatus)
