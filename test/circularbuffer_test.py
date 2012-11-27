@@ -1,14 +1,24 @@
 import unittest
 
+from google.appengine.ext import testbed
+
+
 import util.circularbuffer
 
-class XmppVoiceMailTestCases(unittest.TestCase):
+class CircularBufferTestCases(unittest.TestCase):
 
     def setUp(self):
         self.BUFFER_SIZE = 10
-
+        # Set up Google App Engine testbed
+        self.testbed = testbed.Testbed()
+        self.testbed.activate()
+        self.testbed.init_memcache_stub()
+         
+    def tearDown(self):
+        self.testbed.deactivate()
+               
     def test_lessThanSize(self):
-        buf = util.circularbuffer.ThreadSafeCircularBuffer(self.BUFFER_SIZE)
+        buf = util.circularbuffer.MemCacheCircularBuffer(self.BUFFER_SIZE)
         buf.addItem(1)
 
         items = buf.getItems()
@@ -16,7 +26,7 @@ class XmppVoiceMailTestCases(unittest.TestCase):
         self.assertEquals(1, items[0])
 
     def test_exactBufferSize(self):
-        buf = util.circularbuffer.ThreadSafeCircularBuffer(self.BUFFER_SIZE)
+        buf = util.circularbuffer.MemCacheCircularBuffer(self.BUFFER_SIZE)
         for i in range(0, self.BUFFER_SIZE):
             buf.addItem(i)
             
@@ -27,7 +37,7 @@ class XmppVoiceMailTestCases(unittest.TestCase):
             self.assertEquals(i, items[i])
 
     def test_overBufferSize(self):
-        buf = util.circularbuffer.ThreadSafeCircularBuffer(self.BUFFER_SIZE)
+        buf = util.circularbuffer.MemCacheCircularBuffer(self.BUFFER_SIZE)
         for i in range(0, self.BUFFER_SIZE + 2):
             buf.addItem(i)
             

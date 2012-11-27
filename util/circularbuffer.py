@@ -1,3 +1,4 @@
+import uuid
 import threading
 
 from google.appengine.api import memcache
@@ -48,12 +49,15 @@ class MemCacheCircularBuffer:
     Data is stored in MemCache.
     """
     
-    def __init__(self, keyPrefix, bufferSize):
+    def __init__(self, bufferSize, keyPrefix=None):
         """ Create a new CircularBuffer.
         
         keyPrefix is the prefix to use when storing data in MemCache.
         bufferSize is the maximum number of elements to allow in the buffer.
         """
+        if not keyPrefix:
+            keyPrefix = str(uuid.uuid4())
+            
         self._keyPrefix = keyPrefix
         self._bufferSize = bufferSize
         self._memcache = memcache.Client()
@@ -88,14 +92,12 @@ class MemCacheCircularBuffer:
 
         latestKey = self._memcache.get(key=self._keyPrefix + ":counter", namespace="CircularBuffer")
         if latestKey:
-            keyValue = int(latestKey[(len(self._keyPrefix) + 1):])
-            
             itemCount = self._bufferSize
             if maxItemsToGet:
                 itemCount = min(maxItemsToGet, self._bufferSize)
                 
             if itemCount:
-                end = keyValue + 1
+                end = latestKey + 1
                 start = end - itemCount
                 
                 keysToGet = [(self._keyPrefix + ":" + str(x)) for x in range(start, end)] 
@@ -103,7 +105,7 @@ class MemCacheCircularBuffer:
                 results = self._memcache.get_multi(keysToGet, namespace="CircularBuffer")
                 if results:
                     for key in keysToGet:
-                        if results[key]:
+                        if key in results:
                             answer.append(results[key])
         
         return answer

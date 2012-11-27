@@ -13,7 +13,7 @@ from google.appengine.api import xmpp
 import config
 
 from util.phonenumberutils import  toPrettyNumber, stripNumber, toNormalizedNumber, validateNumber
-from util.circularbuffer import ThreadSafeCircularBuffer
+from util.circularbuffer import MemCacheCircularBuffer
 from models import XmppUser, Contact
 
 class XmppVoiceMailException(Exception):
@@ -138,7 +138,7 @@ class XmppVoiceMail:
         self._APP_ID = app_identity.get_application_id()
         self._owner = owner
         self._communications = Communications()
-        self._messageLog = ThreadSafeCircularBuffer(owner.logSize)
+        self._messageLog = MemCacheCircularBuffer(owner.logSize, "xmppVoiceMailLog")
 
     def _log(self, direction, contact, message):
         if isinstance(contact, Contact):
