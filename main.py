@@ -16,7 +16,7 @@ from google.appengine.ext.webapp.mail_handlers import InboundMailHandler
 from google.appengine.api import xmpp, app_identity
 
 from util import phonenumberutils
-from xmppvoicemail import XmppVoiceMail, Owner, XmppVoiceMailException, PermissionException, InvalidParametersException
+from xmppvoicemail import XmppVoiceMail, Owner, XmppVoiceMailException, PermissionException, InvalidParametersException, SmsException
 from models import XmppUser, Contact
 import errors
 
@@ -85,6 +85,9 @@ class MailHandler(InboundMailHandler):
             
         except InvalidParametersException as e:
             xmppVoiceMail.sendEmailMessageToOwner("Re:" + subject, e.value)
+
+        except SmsException as e:
+            xmppVoiceMail.sendEmailMessageToOwner("Error sending SMS: " + e.value)            
             
         except PermissionException as e:
             logging.error(str(e))
@@ -103,6 +106,10 @@ class XMPPHandler(webapp2.RequestHandler):
         except XmppVoiceMailException as e:
             # Reply back letting the sender know what went wrong.
             message.reply(e.value)
+            
+        except SmsException as e:
+            message.reply("Error sending SMS: " + e.value)
+            
         except:
             logging.exception(sys.exc_info()[0])
             message.reply("Unexpected error:" + str(sys.exc_info()[0]))
@@ -162,7 +169,7 @@ class BaseApiHandler(webapp2.RequestHandler):
         
         else:
             logging.exception(exception)
-            self.response.out.write(json.dumps({"errorType": exception.__class__.__name__, "error": "derp"}));
+            self.response.out.write(json.dumps({"errorType": exception.__class__.__name__, "error": str(exception)}));
             self.response.set_status(500)
 
     @webapp2.cached_property

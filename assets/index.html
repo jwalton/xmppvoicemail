@@ -213,7 +213,7 @@
             <% } else { %>
                 <span class="subscribed contactUnsubscribed">&#x2716;</span>
             <% } %>
-            <span class="contactName"><%= name %></span>
+            <span class="contactName"><%- name %></span>
             <span class="contactNumber"><%= phoneNumber %></span>
         </script>
 
@@ -238,9 +238,9 @@
                 <% } else { %>
                     <span class="logDirection">&#x21FD;</span>
                 <% } %>
-                <span class="logContact"><%= contact %></span>
-                <span class="logTime"><%= timeStr %></span>
-                <span class="logMessage"><%= message %></span>
+                <span class="logContact"><%- contact %></span>
+                <span class="logTime"><%- timeStr %></span>
+                <span class="logMessage"><%- message %></span>
             </li>
         </script>
 

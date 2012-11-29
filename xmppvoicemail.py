@@ -38,6 +38,16 @@ class InvalidParametersException(XmppVoiceMailException):
     def __init__(self, value):
         super(InvalidParametersException, self).__init__(value)
 
+
+class SmsException(XmppVoiceMailException):
+    """ Thrown when an SMS message fails.
+    """
+    def __init__(self, status_code, value):
+        super(SmsException, self).__init__(str(status_code) + ": " + value)
+        self.status_code = status_code
+        self.errorMessage = value
+
+
 class Owner:
     """ Represents the owner of an XmppVoiceMail
     """
@@ -94,6 +104,9 @@ class Communications:
                                     headers={'Content-Type': 'application/x-www-form-urlencoded',
                                              "Authorization": "Basic %s" % (base64.encodestring(config.TWILIO_ACID + ":" + config.TWILIO_AUTH)[:-1]).replace('\n', '') })
             logging.debug('reply content: ' + result.content)
+            
+            if (result.status_code < 200) or (result.status_code >= 300):
+                raise SmsException(result.status_code, result.content)
 
 class LogItem:
     """
@@ -209,6 +222,7 @@ class XmppVoiceMail:
         
         Raises InvalidParametersException if there are problems with the incoming XMPP message.
         Raises PermissionException if the sender is not authorized to use this service.
+        Raises SmsException if an SMS cannot be sent for this email.
         """
         # Make sure the message is from the owner, to stop third parties from
         # using this to spam.
@@ -222,6 +236,7 @@ class XmppVoiceMail:
         
         Raises InvalidParametersException if there are any problems with the format of the email.
         Raises PermissionException if the sender is not authorized to use this service.
+        Raises SmsException if an SMS cannot be sent for this email.
         """
         if not self._owner.emailEnabled():
             raise PermissionException("Email Disabled.")
@@ -240,9 +255,11 @@ class XmppVoiceMail:
     
         toNumber, body = self._getNumberAndBody(contact, messageBody)
 
+        self._communications.sendSMS(self._owner.phoneNumber, toNumber, body)
+        
         self._log(LogItem.FROM_OWNER, contact, body)
 
-        self._communications.sendSMS(self._owner.phoneNumber, toNumber, body)
+            
 
 
     def sendXmppInvite(self, nickname):
@@ -386,13 +403,21 @@ class XmppVoiceMail:
         """ Send an SMS message,
         
         'contact' is only used for display purposes in the log, and may be passed as None.
+        
+        Logs message sent, and any errors which happen as a result of sending it.
+        
+        Raises SmsException on send error.
         """
         displayName = contact
         if not contact:
             displayName, contact = self.getDisplayNameAndContact(toNumber)
             
         self._log(LogItem.FROM_OWNER, displayName, body)
-        self._communications.sendSMS(self._owner.phoneNumber, toNumber, body)
+        try:
+            self._communications.sendSMS(self._owner.phoneNumber, toNumber, body)
+        except SmsException as e:
+            self._log(LogItem.TO_OWNER, displayName, "Could not send message: " + e.value)
+            
 
     
 
